@@ -1,0 +1,239 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "JEA Demo Express API Documentation",
+    "version": "1.0.0",
+    "description": "API documentation for the JEA Demo Express Backend, including Twilio WhatsApp integration."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Welcome Endpoint",
+        "description": "Welcome message and API entry details.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "Welcome to the JEA Demo Express Backend API" },
+                    "status": { "type": "string", "example": "healthy" },
+                    "documentation": { "type": "string", "example": "/api" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api": {
+      "get": {
+        "summary": "API Index",
+        "description": "Retrieve available API endpoints.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "JEA API Root" },
+                    "endpoints": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "method": { "type": "string", "example": "GET" },
+                          "path": { "type": "string", "example": "/api/status" },
+                          "description": { "type": "string", "example": "Get API/System status" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "Get API Status",
+        "description": "Get current API online status and timestamp.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "online" },
+                    "timestamp": { "type": "string", "example": "2026-07-15T13:00:44.182Z" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Get System Health Report",
+        "description": "Retrieve detailed system health, uptime, and memory usage metrics.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "healthy" },
+                    "uptime": { "type": "number", "example": 36.87 },
+                    "memoryUsage": {
+                      "type": "object",
+                      "properties": {
+                        "rss": { "type": "integer", "example": 52989952 },
+                        "heapTotal": { "type": "integer", "example": 9011200 },
+                        "heapUsed": { "type": "integer", "example": 7519304 },
+                        "external": { "type": "integer", "example": 2114516 },
+                        "arrayBuffers": { "type": "integer", "example": 18891 }
+                      }
+                    },
+                    "timestamp": { "type": "string", "example": "2026-07-15T13:00:44.185Z" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/whatsapp/send": {
+      "post": {
+        "summary": "Send WhatsApp Message",
+        "description": "Send a WhatsApp message using Twilio API. Requires configured Twilio credentials in the .env file.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to", "message"],
+                "properties": {
+                  "to": { "type": "string", "description": "Recipient phone number", "example": "+12025550123" },
+                  "message": { "type": "string", "description": "The message body content", "example": "Hello from Express API!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message Sent Successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "messageSid": { "type": "string", "example": "SM87fbc28f4bc9b4b0e527027c936efca7" },
+                    "status": { "type": "string", "example": "queued" },
+                    "to": { "type": "string", "example": "whatsapp:+12025550123" },
+                    "from": { "type": "string", "example": "whatsapp:+14155238886" },
+                    "body": { "type": "string", "example": "Hello from Express API!" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (Missing parameters)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error (Missing/Invalid credentials)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/whatsapp/webhook": {
+      "post": {
+        "summary": "Twilio WhatsApp Webhook",
+        "description": "Webhook endpoint to receive incoming WhatsApp messages from Twilio. Returns Twilio Messaging TwiML XML.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["From", "Body", "MessageSid"],
+                "properties": {
+                  "From": { "type": "string", "description": "Sender phone number starting with 'whatsapp:'", "example": "whatsapp:+12025550123" },
+                  "Body": { "type": "string", "description": "Incoming message body text", "example": "Hello JEA API" },
+                  "MessageSid": { "type": "string", "description": "Twilio Message SID", "example": "SM87fbc28f4bc9b4b0e527027c936efca7" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "TwiML XML response acknowledging receipt and replying",
+            "content": {
+              "text/xml": {
+                "schema": {
+                  "type": "string",
+                  "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Message>Hello! We received your message: \"Hello JEA API\"</Message></Response>"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string", "example": "Error description message" },
+              "status": { "type": "integer", "example": 400 },
+              "timestamp": { "type": "string", "example": "2026-07-15T13:02:59.014Z" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
