@@ -3,18 +3,34 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./swagger.json');
 const apiRoutes = require('./routes/api');
 const errorHandler = require('./middleware/errorHandler');
+const logMiddleware = require('./middleware/logMiddleware');
 
 const app = express();
 
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(logMiddleware);
 
 // Swagger UI Route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // API Routes
 app.use('/api', apiRoutes);
+
+// Dedicated CRUD Service Routes
+app.use('/api/v1/users', require('./routes/userRoutes'));
+app.use('/api/v1/employees', require('./routes/employeeRoutes'));
+app.use('/api/v1/customers', require('./routes/customerRoutes'));
+app.use('/api/v1/sessions', require('./routes/sessionRoutes'));
+app.use('/api/v1/messages', require('./routes/messageRoutes'));
+app.use('/api/v1/campaigns', require('./routes/campaignRoutes'));
+app.use('/api/v1/ratings', require('./routes/ratingRoutes'));
+app.use('/api/v1/tickets', require('./routes/ticketRoutes'));
+app.use('/api/v1/service-categories', require('./routes/serviceCategoryRoutes'));
+app.use('/api/v1/employee-service-categories', require('./routes/employeeServiceCategoryRoutes'));
+app.use('/api/v1/qas', require('./routes/qaRoutes'));
+app.use('/api/v1/notifications', require('./routes/notificationRoutes'));
 
 // Root route redirect/status
 app.get('/', (req, res) => {

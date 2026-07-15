@@ -14,8 +14,11 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "mysql2": "^3.23.0",
+    "sequelize": "^6.37.8",
     "swagger-ui-express": "^5.0.1",
-    "twilio": "^6.0.2"
+    "twilio": "^6.0.2",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

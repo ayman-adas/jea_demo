@@ -1,0 +1,179 @@
+-- MySQL DDL Schema matching the ERD diagram exactly
+
+CREATE DATABASE IF NOT EXISTS `jea_demo` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `jea_demo`;
+
+-- 1. Users Table
+CREATE TABLE IF NOT EXISTS `Users` (
+  `user_id` VARCHAR(255) NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `user_type` ENUM('ADMIN', 'EMPLOYEE', 'CUSTOMER', 'AGENT') NOT NULL,
+  `status` ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB;
+
+-- 2. Employees Table (One-to-One extending Users)
+CREATE TABLE IF NOT EXISTS `Employees` (
+  `id` VARCHAR(255) NOT NULL,
+  `role` ENUM('SUPPORT', 'MANAGER', 'ADMIN', 'AGENT') NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_employees_user` FOREIGN KEY (`id`) REFERENCES `Users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 3. Customers Table (One-to-One extending Users)
+CREATE TABLE IF NOT EXISTS `Customers` (
+  `member_id` VARCHAR(255) NOT NULL,
+  `phone` VARCHAR(255) NOT NULL,
+  `role` ENUM('MEMBER', 'GUEST', 'VIP') NOT NULL DEFAULT 'MEMBER',
+  `access_token` VARCHAR(255) NULL DEFAULT NULL,
+  `refresh_token` VARCHAR(255) NULL DEFAULT NULL,
+  `gender` ENUM('MALE', 'FEMALE', 'OTHER') NOT NULL,
+  PRIMARY KEY (`member_id`),
+  CONSTRAINT `fk_customers_user` FOREIGN KEY (`member_id`) REFERENCES `Users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 4. Sessions Table
+CREATE TABLE IF NOT EXISTS `Sessions` (
+  `session_id` VARCHAR(255) NOT NULL,
+  `is_handover` BOOLEAN NOT NULL DEFAULT FALSE,
+  `status` ENUM('OPEN', 'CLOSED', 'PENDING') NOT NULL DEFAULT 'OPEN',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`session_id`)
+) ENGINE=InnoDB;
+
+-- 5. Messages Table
+CREATE TABLE IF NOT EXISTS `Messages` (
+  `message_id` VARCHAR(255) NOT NULL,
+  `session_id` VARCHAR(255) NOT NULL,
+  `content` TEXT NOT NULL,
+  `from` VARCHAR(255) NOT NULL,
+  `message_type` ENUM('TEXT', 'IMAGE', 'DOCUMENT', 'AUDIO', 'VIDEO') NOT NULL DEFAULT 'TEXT',
+  `status` ENUM('SENT', 'DELIVERED', 'READ', 'FAILED') NOT NULL DEFAULT 'SENT',
+  `created_at` VARCHAR(255) NOT NULL, -- Keep varchar as defined in ERD
+  `updated_at` VARCHAR(255) NOT NULL, -- Keep varchar as defined in ERD
+  `deleted_at` VARCHAR(255) NULL DEFAULT NULL, -- Keep varchar as defined in ERD
+  PRIMARY KEY (`message_id`),
+  CONSTRAINT `fk_messages_session` FOREIGN KEY (`session_id`) REFERENCES `Sessions` (`session_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 6. Campaigns Table
+CREATE TABLE IF NOT EXISTS `Campaigns` (
+  `campaign_id` VARCHAR(255) NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `description` VARCHAR(255) NOT NULL,
+  `template_type` ENUM('PROMOTION', 'ALERT', 'NEWSLETTER') NOT NULL,
+  `created_by` VARCHAR(255) NOT NULL,
+  `status` ENUM('DRAFT', 'SCHEDULED', 'SENT', 'FAILED') NOT NULL DEFAULT 'DRAFT',
+  `scheduled_at` TIMESTAMP NULL DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`campaign_id`),
+  CONSTRAINT `fk_campaigns_user` FOREIGN KEY (`created_by`) REFERENCES `Users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 7. Rating Table
+CREATE TABLE IF NOT EXISTS `Rating` (
+  `rate_id` VARCHAR(255) NOT NULL,
+  `rate_value` FLOAT NOT NULL,
+  `user_id` VARCHAR(255) NOT NULL,
+  `status` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`rate_id`),
+  CONSTRAINT `fk_ratings_customer` FOREIGN KEY (`user_id`) REFERENCES `Customers` (`member_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 8. Tickets Table
+CREATE TABLE IF NOT EXISTS `Tickets` (
+  `ticket_id` VARCHAR(255) NOT NULL,
+  `ticket_priority` ENUM('LOW', 'MEDIUM', 'HIGH', 'URGENT') NOT NULL DEFAULT 'LOW',
+  `title` VARCHAR(255) NOT NULL,
+  `content` TEXT NOT NULL,
+  `ai_confedance` FLOAT NOT NULL DEFAULT 0.0, -- Matching the exact ERD spelling 'ai_confedance'
+  `user_id` VARCHAR(255) NOT NULL,
+  `emp_assigned` VARCHAR(255) NULL DEFAULT NULL,
+  `start_time` TIMESTAMP NULL DEFAULT NULL,
+  `end_time` TIMESTAMP NULL DEFAULT NULL,
+  `status` ENUM('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED') NOT NULL DEFAULT 'OPEN',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`ticket_id`),
+  CONSTRAINT `fk_tickets_customer` FOREIGN KEY (`user_id`) REFERENCES `Customers` (`member_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_tickets_employee` FOREIGN KEY (`emp_assigned`) REFERENCES `Employees` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 9. Service Categories Table
+CREATE TABLE IF NOT EXISTS `ServiceCategories` (
+  `service_id` VARCHAR(255) NOT NULL,
+  `service_name` VARCHAR(255) NOT NULL,
+  `status` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`service_id`)
+) ENGINE=InnoDB;
+
+-- 10. EmployeeServiceCategories Junction Table (Many-to-Many)
+CREATE TABLE IF NOT EXISTS `EmployeeServiceCategories` (
+  `service_category_id` VARCHAR(255) NOT NULL,
+  `emp_id` VARCHAR(255) NOT NULL,
+  `status` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`service_category_id`, `emp_id`),
+  CONSTRAINT `fk_esc_service` FOREIGN KEY (`service_category_id`) REFERENCES `ServiceCategories` (`service_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_esc_employee` FOREIGN KEY (`emp_id`) REFERENCES `Employees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 11. Q&A Table
+CREATE TABLE IF NOT EXISTS `QA` (
+  `id` VARCHAR(255) NOT NULL,
+  `service_category_id` VARCHAR(255) NOT NULL,
+  `content` TEXT NOT NULL,
+  `content_type` ENUM('TEXT', 'HTML', 'MARKDOWN') NOT NULL DEFAULT 'TEXT',
+  `employee_assigned` VARCHAR(255) NOT NULL,
+  `status` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_qa_service` FOREIGN KEY (`service_category_id`) REFERENCES `ServiceCategories` (`service_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_qa_employee` FOREIGN KEY (`employee_assigned`) REFERENCES `Employees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 12. Notifications Table
+CREATE TABLE IF NOT EXISTS `Notifications` (
+  `notification_id` VARCHAR(255) NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `content` VARCHAR(255) NOT NULL,
+  `emp_id` VARCHAR(255) NOT NULL,
+  `status` ENUM('READ', 'UNREAD') NOT NULL DEFAULT 'UNREAD',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`notification_id`),
+  CONSTRAINT `fk_notifications_employee` FOREIGN KEY (`emp_id`) REFERENCES `Employees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 13. AuditLogs Table
+CREATE TABLE IF NOT EXISTS `AuditLogs` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `model_name` VARCHAR(255) NOT NULL,
+  `action` ENUM('CREATE', 'UPDATE', 'DELETE') NOT NULL,
+  `record_id` VARCHAR(255) NOT NULL,
+  `user_id` VARCHAR(255) NULL DEFAULT NULL,
+  `old_values` JSON NULL DEFAULT NULL,
+  `new_values` JSON NULL DEFAULT NULL,
+  `ip_address` VARCHAR(255) NULL DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB;
