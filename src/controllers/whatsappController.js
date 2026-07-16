@@ -327,6 +327,8 @@ exports.receiveWebhook = async (req, res, next) => {
     console.log(`---------------------------------\n`);
 
     const cleanPhone = From.replace('whatsapp:', '').trim();
+    const fromWhatsApp = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+    const toWhatsApp = formatWhatsAppNumber(cleanPhone);
     const { MessagingResponse } = twilio.twiml;
     const twiml = new MessagingResponse();
 
@@ -533,9 +535,6 @@ exports.receiveWebhook = async (req, res, next) => {
         ? process.env.GREETING_TEMPLATE_SID_AR
         : process.env.GREETING_TEMPLATE_SID_EN;
 
-      const fromWhatsApp = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
-      const toWhatsApp = formatWhatsAppNumber(cleanPhone);
-
       if (greetingSid) {
         try {
           const client = getTwilioClient();
@@ -611,6 +610,39 @@ exports.receiveWebhook = async (req, res, next) => {
         return res.send(twiml.toString());
       }
 
+      // For the Health Insurance category, send the Twilio Quick Reply Content Template
+      // with interactive buttons instead of a plain text list.
+      const isHealthInsurance = selectedCategory.service_id === 'health_insurance';
+      const healthInsuranceSid = userLang === 'ar'
+        ? process.env.HEALTH_INSURANCE_TEMPLATE_SID_AR
+        : process.env.HEALTH_INSURANCE_TEMPLATE_SID_EN;
+
+      if (isHealthInsurance && healthInsuranceSid) {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: healthInsuranceSid
+          });
+          console.log(`Health Insurance Quick Reply Template sent. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[Quick Reply Template: ${healthInsuranceSid}]`, 'SERVER', 'TEXT');
+
+          sessionStates.set(cleanPhone, {
+            step: 'AWAITING_SERVICE',
+            services: filteredServices,
+            selectedCategory,
+            lang: userLang
+          });
+
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } catch (templateErr) {
+          console.error('Failed to send Health Insurance Quick Reply template, falling back to plain text:', templateErr.message);
+        }
+      }
+
+      // Plain text fallback
       const serviceList = filteredServices.map((s, i) => `${i + 1}. Request service: ${s.id}`).join('\n');
       const responseText = getTranslation(userLang, 'selectServicePrompt', { category: selectedCategory.service_name, list: serviceList });
 
@@ -629,14 +661,70 @@ exports.receiveWebhook = async (req, res, next) => {
 
     // AWAITING_SERVICE step
     if (state?.step === 'AWAITING_SERVICE') {
-      const selection = Number.parseInt(incomingBody.trim(), 10);
+      const trimmedBody = incomingBody.trim();
+
+      // Handle "Main Menu" button reply — go back to greeting
+      if (trimmedBody === 'main_menu' || trimmedBody === 'القائمة الرئيسية' || trimmedBody === 'Main Menu') {
+        sessionStates.delete(cleanPhone);
+        const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
+        const greetingSid = userLang === 'ar'
+          ? process.env.GREETING_TEMPLATE_SID_AR
+          : process.env.GREETING_TEMPLATE_SID_EN;
+
+        if (greetingSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: greetingSid
+            });
+            console.log(`Greeting template sent after main_menu. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[List Picker Template: ${greetingSid}]`, 'SERVER', 'TEXT');
+            sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (err) {
+            console.error('Failed to send greeting template:', err.message);
+          }
+        }
+        // Plain text fallback for main menu
+        const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}`).join('\n');
+        const welcomeText = getTranslation(userLang, 'welcomePrompt', { name: displayName, list: categoryList });
+        sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+        await recordMessage(session.session_id, welcomeText, 'SERVER', 'TEXT');
+        twiml.message(welcomeText);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      // Handle "View Insurance Card" button reply — map to svc_health_card_info service
+      if (trimmedBody === 'view_health_card' || trimmedBody === 'عرض بطاقة التأمين' || trimmedBody === 'View Insurance Card') {
+        const selectedService = state.services.find(s => s.id === 'svc_health_card_info') || state.services[0];
+        if (selectedService) {
+          const templatePrompt = getTranslation(userLang, 'templatePrompt', { service: selectedService.id, content: selectedService.content });
+          sessionStates.set(cleanPhone, {
+            step: 'AWAITING_TEMPLATE',
+            selectedCategory: state.selectedCategory,
+            selectedService,
+            lang: userLang
+          });
+          await recordMessage(session.session_id, templatePrompt, 'SERVER', 'TEXT');
+          twiml.message(templatePrompt);
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        }
+      }
+
+      // Numeric or ID selection (plain text fallback)
+      const selection = Number.parseInt(trimmedBody, 10);
       let selectedService = null;
 
       if (!Number.isNaN(selection) && selection > 0 && selection <= state.services.length) {
         selectedService = state.services[selection - 1];
       } else {
         selectedService = state.services.find(
-          s => s.id.toLowerCase() === incomingBody.trim().toLowerCase()
+          s => s.id.toLowerCase() === trimmedBody.toLowerCase()
         );
       }
 
