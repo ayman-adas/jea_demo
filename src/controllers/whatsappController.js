@@ -572,8 +572,12 @@ exports.receiveWebhook = async (req, res, next) => {
       if (!Number.isNaN(selection) && selection > 0 && selection <= state.categories.length) {
         selectedCategory = state.categories[selection - 1];
       } else {
+        // Twilio sends the ListId (service_id) as the Body for interactive list replies,
+        // but users may also type the display name — match both.
+        const normalizedInput = incomingBody.trim().toLowerCase();
         selectedCategory = state.categories.find(
-          c => c.service_name.toLowerCase() === incomingBody.trim().toLowerCase()
+          c => c.service_name.toLowerCase() === normalizedInput
+            || c.service_id.toLowerCase() === normalizedInput
         );
       }
 
