@@ -19,6 +19,14 @@ const Rating = sequelize.define('Rating', {
     type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
     allowNull: false,
     defaultValue: 'ACTIVE'
+  },
+  comments: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  ticket_id: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   timestamps: true,

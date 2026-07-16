@@ -3350,8 +3350,190 @@
         }
       }
     }
+  ,
+  "/api/v1/audit-logs": {
+    "get": {
+      "tags": [
+        "Audit Log"
+      ],
+      "summary": "List Audit Log Records",
+      "description": "Retrieve a list of database audit logs with pagination and filters.",
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "description": "Number of records to return",
+          "schema": {
+            "type": "integer",
+            "default": 50
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "description": "Number of records to skip",
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Success",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "success": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "total": {
+                    "type": "integer",
+                    "example": 10
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "example": 50
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "example": 0
+                  },
+                  "data": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   },
-  "components": {
+  "/api/v1/audit-logs/{id}": {
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Primary key identifier of the Audit Log",
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "get": {
+      "tags": [
+        "Audit Log"
+      ],
+      "summary": "Get Audit Log Details",
+      "description": "Fetch detailed information for a single audit log entry.",
+      "responses": {
+        "200": {
+          "description": "Success",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "success": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "data": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "404": {
+          "description": "Not Found",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/v1/upload": {
+    "post": {
+      "tags": [
+        "Upload"
+      ],
+      "summary": "Upload File to FTP Storage",
+      "description": "Uploads a multipart form file to the local FTP server and returns the file link.",
+      "requestBody": {
+        "required": true,
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "file"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "The file to upload to the FTP server (maximum size 10MB)"
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "File uploaded successfully to FTP storage",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "success": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "File uploaded successfully to FTP storage."
+                  },
+                  "url": {
+                    "type": "string",
+                    "example": "ftp://localhost/public_html/uploads/1628177481912-example.png"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Bad Request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+},
+"components": {
     "schemas": {
       "ErrorResponse": {
         "type": "object",

@@ -15,6 +15,10 @@ const ServiceCategory = sequelize.define('ServiceCategory', {
     type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
     allowNull: false,
     defaultValue: 'ACTIVE'
+  },
+  contact_number: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   timestamps: true,

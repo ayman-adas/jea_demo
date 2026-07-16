@@ -4,6 +4,7 @@ const swaggerDocument = require('./swagger.json');
 const apiRoutes = require('./routes/api');
 const errorHandler = require('./middleware/errorHandler');
 const logMiddleware = require('./middleware/logMiddleware');
+const langMiddleware = require('./middleware/langMiddleware');
 
 const app = express();
 
@@ -11,6 +12,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(logMiddleware);
+app.use(langMiddleware);
 
 // Swagger UI Route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
@@ -31,6 +33,8 @@ app.use('/api/v1/service-categories', require('./routes/serviceCategoryRoutes'))
 app.use('/api/v1/employee-service-categories', require('./routes/employeeServiceCategoryRoutes'));
 app.use('/api/v1/qas', require('./routes/qaRoutes'));
 app.use('/api/v1/notifications', require('./routes/notificationRoutes'));
+app.use('/api/v1/audit-logs', require('./routes/auditLogRoutes'));
+app.use('/api/v1/upload', require('./routes/uploadRoutes'));
 
 // Root route redirect/status
 app.get('/', (req, res) => {

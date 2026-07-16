@@ -38,6 +38,10 @@ Message.belongsTo(Session, { foreignKey: 'session_id', as: 'session', onDelete: 
 Customer.hasMany(Rating, { foreignKey: 'user_id', as: 'ratings', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
 Rating.belongsTo(Customer, { foreignKey: 'user_id', as: 'customer', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
 
+// 5b. Ticket <-> Rating (One-to-One)
+Ticket.hasOne(Rating, { foreignKey: 'ticket_id', as: 'rating', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Rating.belongsTo(Ticket, { foreignKey: 'ticket_id', as: 'ticket', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+
 // 6. Customer <-> Ticket (One-to-Many)
 Customer.hasMany(Ticket, { foreignKey: 'user_id', as: 'tickets', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
 Ticket.belongsTo(Customer, { foreignKey: 'user_id', as: 'customer', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
