@@ -12,6 +12,212 @@
     }
   ],
   "paths": {
+    "/api/admin/auth/login": {
+      "post": {
+        "summary": "Admin Login",
+        "description": "Authenticate an administrator or agent and return a JWT token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "admin" },
+                  "password": { "type": "string", "example": "admin123" }
+                },
+                "required": ["username", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login Successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": { "type": "string", "example": "eyJhbGciOi..." },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "user_id": { "type": "string", "example": "admin" },
+                            "name": { "type": "string", "example": "admin" },
+                            "user_type": { "type": "string", "example": "ADMIN" },
+                            "status": { "type": "string", "example": "ACTIVE" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dashboard": {
+      "get": {
+        "summary": "Get Dashboard Statistics",
+        "description": "Retrieve general count statistics and recent message logs for the admin dashboard.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "sessions": {
+                          "type": "object",
+                          "properties": {
+                            "open": { "type": "integer", "example": 2 },
+                            "closed": { "type": "integer", "example": 5 },
+                            "handover": { "type": "integer", "example": 1 },
+                            "total": { "type": "integer", "example": 7 }
+                          }
+                        },
+                        "tickets": {
+                          "type": "object",
+                          "properties": {
+                            "open": { "type": "integer", "example": 1 },
+                            "resolved": { "type": "integer", "example": 3 },
+                            "total": { "type": "integer", "example": 4 }
+                          }
+                        },
+                        "customers": {
+                          "type": "object",
+                          "properties": {
+                            "total": { "type": "integer", "example": 12 }
+                          }
+                        },
+                        "messages": {
+                          "type": "object",
+                          "properties": {
+                            "total": { "type": "integer", "example": 84 },
+                            "recent": { "type": "array", "items": { "type": "object" } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/sessions": {
+      "get": {
+        "summary": "List Chat Sessions",
+        "description": "List all active chat conversation sessions with latest message details.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/admin/sessions/{sessionId}/messages": {
+      "get": {
+        "summary": "Get Session Message History",
+        "description": "Retrieve chronological message log for a specific chat session.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/admin/sessions/{sessionId}/handover": {
+      "patch": {
+        "summary": "Toggle Support Handover Mode",
+        "description": "Enable or disable support human handover (human vs bot mode) for a session.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "is_handover": { "type": "boolean", "example": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/admin/sessions/{sessionId}/status": {
+      "patch": {
+        "summary": "Update Session Status",
+        "description": "Change session status between OPEN, CLOSED, or PENDING.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["OPEN", "CLOSED", "PENDING"], "example": "CLOSED" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Welcome Endpoint",
