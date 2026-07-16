@@ -977,19 +977,40 @@ exports.receiveWebhook = async (req, res, next) => {
         const needsTicket = ticketKeywords.some(kw => incomingBody.toLowerCase().includes(kw));
 
         if (needsTicket) {
-          // Case 2: Problem or service request -> Prompt to open a ticket
-          const scorePercentage = Math.round(qaResult.score * 100);
-          const replyText = getTranslation(userLang, 'cantAnswerMsg', { score: scorePercentage });
+          // Case 2: Problem or service request -> Create ticket IMMEDIATELY
+          const ticketId = 'tkt_' + crypto.randomUUID();
+          const detectedRegion = detectRegionByPhone(cleanPhone);
+          
+          const ticketTitle = userLang === 'ar'
+            ? `استفسار ذكاء اصطناعي (غير مجاب عليه) - المهندس: ${displayName}`
+            : `AI Q&A Inquiry (Unanswered) - Eng: ${displayName}`;
+
+          const ticketContent = userLang === 'ar'
+            ? `[السؤال]: ${incomingBody}\n[درجة الثقة]: ${Math.round((qaResult.score || 0) * 100)}%\n[المنطقة]: ${detectedRegion}`
+            : `[Question]: ${incomingBody}\n[Confidence]: ${Math.round((qaResult.score || 0) * 100)}%\n[Region]: ${detectedRegion}`;
+
+          await Ticket.create({
+            ticket_id: ticketId,
+            ticket_priority: 'MEDIUM',
+            title: ticketTitle,
+            content: ticketContent,
+            ai_confedance: qaResult.score || 0.0,
+            user_id: customer.member_id,
+            status: 'OPEN'
+          });
 
           sessionStates.set(cleanPhone, {
-            step: 'AWAITING_TICKET_CONFIRM',
-            originalQuestion: incomingBody,
-            score: qaResult.score,
+            step: 'AWAITING_RATING',
+            ticketId,
             lang: userLang
           });
 
-          await recordMessage(session.session_id, replyText, 'SERVER', 'TEXT');
-          twiml.message(replyText);
+          const successText = userLang === 'ar'
+            ? `شكراً لك! تم تسجيل طلبك بنجاح وفتح تذكرة دعم برقم (${ticketId}) لمتابعة استفسارك مع القسم المختص.\n\nيرجى تقييم جودة الخدمة من 1 إلى 5 درجات:`
+            : `Thank you! Your request has been successfully registered and a support ticket (${ticketId}) has been opened to follow up with our team.\n\nPlease rate our service quality from 1 to 5 stars:`;
+
+          await recordMessage(session.session_id, successText, 'SERVER', 'TEXT');
+          twiml.message(successText);
           res.type('text/xml');
           return res.send(twiml.toString());
         } else {
