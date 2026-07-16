@@ -41,8 +41,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use(logMiddleware);
 app.use(langMiddleware);
 
-// Swagger UI Route
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Swagger UI Route with dynamic server host resolution (resolves ngrok / localhost dynamically)
+app.use("/api-docs", swaggerUi.serve, (req, res, next) => {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  const dynamicUrl = `${protocol}://${host}`;
+
+  const dynamicSwagger = {
+    ...swaggerDocument,
+    servers: [
+      {
+        url: dynamicUrl,
+        description: "Active Request Server"
+      }
+    ]
+  };
+
+  swaggerUi.setup(dynamicSwagger)(req, res, next);
+});
 
 // Admin API Routes (auth + admin panel endpoints)
 app.use("/api/admin", adminRoutes);
