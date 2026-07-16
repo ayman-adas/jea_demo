@@ -702,23 +702,93 @@ exports.receiveWebhook = async (req, res, next) => {
         return res.send(twiml.toString());
       }
 
-      // Handle "View Insurance Card" button reply — map to svc_health_card_info service
+      // Handle "View Insurance Card" button — call JEA Health Insurance API
       if (trimmedBody === 'view_health_card' || trimmedBody === 'عرض بطاقة التأمين' || trimmedBody === 'View Insurance Card') {
-        const selectedService = state.services.find(s => s.id === 'svc_health_card_info') || state.services[0];
-        if (selectedService) {
-          const templatePrompt = getTranslation(userLang, 'templatePrompt', { service: selectedService.id, content: selectedService.content });
-          sessionStates.set(cleanPhone, {
-            step: 'AWAITING_TEMPLATE',
-            selectedCategory: state.selectedCategory,
-            selectedService,
-            lang: userLang
+        try {
+          // Get engineer key: from customer record or use default for testing
+          const engKey = customer?.eng_key || process.env.DEFAULT_ENG_KEY || '100006';
+
+          const apiUrl = `http://188.247.92.205:2233/api/MobService_Health/GET_Cards_health?p_fincrd_srctyp_val=2&p_eng_key=${engKey}`;
+          const http = require('node:http');
+
+          const apiResponse = await new Promise((resolve, reject) => {
+            http.get(apiUrl, {
+              headers: {
+                'Authorization': `Bearer ${process.env.JEA_HEALTH_API_TOKEN || 'F2D544A52558B6BAC62C313FCCE48'}`
+              }
+            }, (res) => {
+              let data = '';
+              res.on('data', chunk => { data += chunk; });
+              res.on('end', () => {
+                try {
+                  resolve({ status: res.statusCode, body: JSON.parse(data) });
+                } catch {
+                  resolve({ status: res.statusCode, body: data });
+                }
+              });
+            }).on('error', reject);
           });
-          await recordMessage(session.session_id, templatePrompt, 'SERVER', 'TEXT');
-          twiml.message(templatePrompt);
+
+          if (apiResponse.status === 200 && apiResponse.body?.Table?.length > 0) {
+            const cards = apiResponse.body.Table;
+
+            // Format each card's info as a readable WhatsApp message
+            let reply = userLang === 'ar'
+              ? `💳 *بطاقات التأمين الصحي*\n━━━━━━━━━━━━━━━━━━━━\n`
+              : `💳 *Health Insurance Cards*\n━━━━━━━━━━━━━━━━━━━━\n`;
+
+            cards.forEach((card, index) => {
+              if (userLang === 'ar') {
+                reply += `\n*بطاقة ${index + 1}:*\n`;
+                reply += `👤 الاسم: ${card.ENG_NAME || '-'}\n`;
+                if (card.BENNAME?.trim()) reply += `👥 المستفيد: ${card.BENNAME.trim()}\n`;
+                reply += `🔢 رقم التأمين: ${card.INSURNO || '-'}\n`;
+                reply += `📋 البرنامج: ${card.TYPE_MM || '-'}\n`;
+                reply += `🏥 التغطية: ${card.GRADE || '-'}\n`;
+                reply += `💰 نسبة التحمل: ${card.OUT_PERC || '-'}\n`;
+                reply += `📅 تاريخ الانضمام: ${card.JOINE_DATE || '-'}\n`;
+                reply += `⏰ تاريخ الانتهاء: ${card.END_DATE || '-'}\n`;
+                reply += `━━━━━━━━━━━━━━━━━━━━\n`;
+              } else {
+                reply += `\n*Card ${index + 1}:*\n`;
+                reply += `👤 Name: ${card.ENG_NAME || '-'}\n`;
+                if (card.BENNAME?.trim()) reply += `👥 Beneficiary: ${card.BENNAME.trim()}\n`;
+                reply += `🔢 Insurance No: ${card.INSURNO || '-'}\n`;
+                reply += `📋 Program: ${card.TYPE_MM || '-'}\n`;
+                reply += `🏥 Coverage: ${card.GRADE || '-'}\n`;
+                reply += `💰 Co-pay: ${card.OUT_PERC || '-'}\n`;
+                reply += `📅 Join Date: ${card.JOINE_DATE || '-'}\n`;
+                reply += `⏰ End Date: ${card.END_DATE || '-'}\n`;
+                reply += `━━━━━━━━━━━━━━━━━━━━\n`;
+              }
+            });
+
+            sessionStates.delete(cleanPhone);
+            await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+            twiml.message(reply);
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } else {
+            const noDataReply = userLang === 'ar'
+              ? '⚠️ لم يتم العثور على بطاقات تأمين صحي مرتبطة بحسابك. يرجى التواصل مع النقابة للمساعدة.'
+              : '⚠️ No health insurance cards found for your account. Please contact JEA for assistance.';
+            await recordMessage(session.session_id, noDataReply, 'SERVER', 'TEXT');
+            twiml.message(noDataReply);
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          }
+        } catch (apiErr) {
+          console.error('Health Insurance API error:', apiErr.message);
+          const errorReply = userLang === 'ar'
+            ? '❌ حدث خطأ أثناء استرجاع بيانات التأمين. يرجى المحاولة مجدداً لاحقاً.'
+            : '❌ An error occurred while retrieving insurance data. Please try again later.';
+          await recordMessage(session.session_id, errorReply, 'SERVER', 'TEXT');
+          twiml.message(errorReply);
           res.type('text/xml');
           return res.send(twiml.toString());
         }
       }
+
 
       // Numeric or ID selection (plain text fallback)
       const selection = Number.parseInt(trimmedBody, 10);
