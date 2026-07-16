@@ -306,8 +306,8 @@ exports.receiveWebhook = async (req, res, next) => {
   try {
     const { From, Body, MessageSid, ProfileName, SmsStatus, MessageStatus } = req.body;
 
-    // Handle Twilio Status Callbacks directly
-    if (SmsStatus || MessageStatus) {
+    // Handle Twilio Status Callbacks directly (excluding incoming messages where SmsStatus is 'received')
+    if (MessageStatus || (SmsStatus && SmsStatus !== 'received')) {
       console.log(`Received Twilio message status callback: SID=${MessageSid || req.body.SmsSid}, Status=${SmsStatus || MessageStatus}`);
       return res.sendStatus(200);
     }

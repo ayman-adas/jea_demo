@@ -42,7 +42,7 @@ const whatsappMinutelyLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.body.From || req['ip'];
   },
-  skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
+  skip: (req) => req.body && (req.body.MessageStatus || (req.body.SmsStatus && req.body.SmsStatus !== 'received')),
   handler: (req, res) => {
     // Bilingual response for direct localization support
     const bilingualMessage = 
@@ -63,7 +63,7 @@ const whatsappDailyLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.body.From || req['ip'];
   },
-  skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
+  skip: (req) => req.body && (req.body.MessageStatus || (req.body.SmsStatus && req.body.SmsStatus !== 'received')),
   handler: (req, res) => {
     // Bilingual response for direct localization support
     const bilingualMessage = 
