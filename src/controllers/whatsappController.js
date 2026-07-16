@@ -614,39 +614,90 @@ exports.receiveWebhook = async (req, res, next) => {
         return res.send(twiml.toString());
       }
 
-      // For the Health Insurance category, send the Twilio Quick Reply Content Template
-      // with interactive buttons instead of a plain text list.
-      const isHealthInsurance = selectedCategory.service_id === 'health_insurance';
-      const healthInsuranceSid = userLang === 'ar'
-        ? process.env.HEALTH_INSURANCE_TEMPLATE_SID_AR
-        : process.env.HEALTH_INSURANCE_TEMPLATE_SID_EN;
-
-      if (isHealthInsurance && healthInsuranceSid) {
+      // For the Health Insurance category — call API directly and return card info
+      if (selectedCategory.service_id === 'health_insurance') {
         try {
-          const client = getTwilioClient();
-          const msgResult = await client.messages.create({
-            from: fromWhatsApp,
-            to: toWhatsApp,
-            contentSid: healthInsuranceSid
-          });
-          console.log(`Health Insurance Quick Reply Template sent. SID=${msgResult.sid}`);
-          await recordMessage(session.session_id, `[Quick Reply Template: ${healthInsuranceSid}]`, 'SERVER', 'TEXT');
+          const engKey = customer?.eng_key || process.env.DEFAULT_ENG_KEY || '100006';
+          const apiUrl = `http://188.247.92.205:2233/api/MobService_Health/GET_Cards_health?p_fincrd_srctyp_val=2&p_eng_key=${engKey}`;
+          const http = require('node:http');
 
-          sessionStates.set(cleanPhone, {
-            step: 'AWAITING_SERVICE',
-            services: filteredServices,
-            selectedCategory,
-            lang: userLang
+          const apiResponse = await new Promise((resolve, reject) => {
+            http.get(apiUrl, {
+              headers: {
+                'Authorization': `Bearer ${process.env.JEA_HEALTH_API_TOKEN || 'F2D544A52558B6BAC62C313FCCE48'}`
+              }
+            }, (apiRes) => {
+              let data = '';
+              apiRes.on('data', chunk => { data += chunk; });
+              apiRes.on('end', () => {
+                try { resolve({ status: apiRes.statusCode, body: JSON.parse(data) }); }
+                catch { resolve({ status: apiRes.statusCode, body: data }); }
+              });
+            }).on('error', reject);
           });
 
+          sessionStates.delete(cleanPhone);
+
+          if (apiResponse.status === 200 && apiResponse.body?.Table?.length > 0) {
+            const cards = apiResponse.body.Table;
+            let reply = userLang === 'ar'
+              ? `💳 *بطاقات التأمين الصحي*\n━━━━━━━━━━━━━━━━━━━━\n`
+              : `💳 *Health Insurance Cards*\n━━━━━━━━━━━━━━━━━━━━\n`;
+
+            cards.forEach((card, index) => {
+              if (userLang === 'ar') {
+                reply += `\n*بطاقة ${index + 1}:*\n`;
+                reply += `👤 الاسم: ${card.ENG_NAME || '-'}\n`;
+                if (card.BENNAME?.trim()) reply += `👥 المستفيد: ${card.BENNAME.trim()}\n`;
+                reply += `🔢 رقم التأمين: ${card.INSURNO || '-'}\n`;
+                reply += `📋 البرنامج: ${card.TYPE_MM || '-'}\n`;
+                reply += `🏥 التغطية: ${card.GRADE || '-'}\n`;
+                reply += `💰 نسبة التحمل: ${card.OUT_PERC || '-'}\n`;
+                reply += `📅 تاريخ الانضمام: ${card.JOINE_DATE || '-'}\n`;
+                reply += `⏰ تاريخ الانتهاء: ${card.END_DATE || '-'}\n`;
+                reply += `━━━━━━━━━━━━━━━━━━━━\n`;
+              } else {
+                reply += `\n*Card ${index + 1}:*\n`;
+                reply += `👤 Name: ${card.ENG_NAME || '-'}\n`;
+                if (card.BENNAME?.trim()) reply += `👥 Beneficiary: ${card.BENNAME.trim()}\n`;
+                reply += `🔢 Insurance No: ${card.INSURNO || '-'}\n`;
+                reply += `📋 Program: ${card.TYPE_MM || '-'}\n`;
+                reply += `🏥 Coverage: ${card.GRADE || '-'}\n`;
+                reply += `💰 Co-pay: ${card.OUT_PERC || '-'}\n`;
+                reply += `📅 Join Date: ${card.JOINE_DATE || '-'}\n`;
+                reply += `⏰ End Date: ${card.END_DATE || '-'}\n`;
+                reply += `━━━━━━━━━━━━━━━━━━━━\n`;
+              }
+            });
+
+            await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+            twiml.message(reply);
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } else {
+            const noDataReply = userLang === 'ar'
+              ? '⚠️ لم يتم العثور على بطاقات تأمين صحي مرتبطة بحسابك. يرجى التواصل مع النقابة للمساعدة.\n⚠️ No health insurance cards found. Please contact JEA for assistance.'
+              : '⚠️ No health insurance cards found for your account. Please contact JEA for assistance.\n⚠️ لم يتم العثور على بطاقات تأمين صحي. يرجى التواصل مع النقابة.';
+            await recordMessage(session.session_id, noDataReply, 'SERVER', 'TEXT');
+            twiml.message(noDataReply);
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          }
+        } catch (apiErr) {
+          console.error('Health Insurance API error:', apiErr.message);
+          const errorReply = userLang === 'ar'
+            ? '❌ حدث خطأ أثناء استرجاع بيانات التأمين. يرجى المحاولة مجدداً لاحقاً.\n❌ Error retrieving insurance data. Please try again later.'
+            : '❌ An error occurred while retrieving insurance data. Please try again later.\n❌ حدث خطأ أثناء استرجاع بيانات التأمين. يرجى المحاولة لاحقاً.';
+          sessionStates.delete(cleanPhone);
+          await recordMessage(session.session_id, errorReply, 'SERVER', 'TEXT');
+          twiml.message(errorReply);
           res.type('text/xml');
           return res.send(twiml.toString());
-        } catch (templateErr) {
-          console.error('Failed to send Health Insurance Quick Reply template, falling back to plain text:', templateErr.message);
         }
       }
 
-      // Plain text fallback
+      // Plain text fallback for other categories
+
       const serviceList = filteredServices.map((s, i) => `${i + 1}. Request service: ${s.id}`).join('\n');
       const responseText = getTranslation(userLang, 'selectServicePrompt', { category: selectedCategory.service_name, list: serviceList });
 
