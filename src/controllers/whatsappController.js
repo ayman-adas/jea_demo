@@ -155,7 +155,7 @@ const getPublicUrl = async (req) => {
       return response.tunnels[0].public_url;
     }
   } catch (err) {
-    // ngrok is not running locally or port 4040 is not accessible
+    console.debug('ngrok tunnels local check failed:', err.message);
   }
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const host = req.get('host');
@@ -512,16 +512,44 @@ exports.receiveWebhook = async (req, res, next) => {
         return res.send(twiml.toString());
       }
 
+      sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+
+      // Use Twilio Content Template (List Picker) if configured, otherwise fall back to plain text
+      const greetingSid = userLang === 'ar'
+        ? process.env.GREETING_TEMPLATE_SID_AR
+        : process.env.GREETING_TEMPLATE_SID_EN;
+
+      const fromWhatsApp = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+      const toWhatsApp = formatWhatsAppNumber(cleanPhone);
+
+      if (greetingSid) {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: greetingSid
+          });
+          console.log(`Greeting Content Template sent. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[List Picker Template: ${greetingSid}]`, 'SERVER', 'TEXT');
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } catch (templateErr) {
+          console.error('Failed to send greeting Content Template, falling back to plain text:', templateErr.message);
+        }
+      }
+
+      // Plain text fallback
       const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}`).join('\n');
       const responseText = getTranslation(userLang, 'welcomePrompt', { name: customer.user.name, list: categoryList });
 
-      sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
       await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
 
       twiml.message(responseText);
       res.type('text/xml');
       return res.send(twiml.toString());
     }
+
 
     // AWAITING_CATEGORY step
     if (state?.step === 'AWAITING_CATEGORY') {

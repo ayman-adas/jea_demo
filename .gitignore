@@ -115,3 +115,7 @@ dist/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Temporary directories
+tmp_uploads/
+logs/
