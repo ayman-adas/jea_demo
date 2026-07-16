@@ -5,6 +5,11 @@ const Joi = require('joi');
  */
 const validateBody = (schema) => {
   return (req, res, next) => {
+    // Bypass validation for Twilio status callback payloads (which don't contain message text body/sender information)
+    if (req.body && (req.body.SmsStatus || req.body.MessageStatus)) {
+      return next();
+    }
+    
     const { error } = schema.validate(req.body, { abortEarly: false, allowUnknown: true });
     
     if (error) {

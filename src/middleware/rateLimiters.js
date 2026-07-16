@@ -33,6 +33,7 @@ const whatsappMinutelyLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.body.From || req['ip'];
   },
+  skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -53,6 +54,7 @@ const whatsappDailyLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.body.From || req['ip'];
   },
+  skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
   handler: (req, res) => {
     res.status(429).json({
       success: false,

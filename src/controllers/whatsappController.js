@@ -304,7 +304,13 @@ exports.sendWhatsApp = async (req, res, next) => {
  */
 exports.receiveWebhook = async (req, res, next) => {
   try {
-    const { From, Body, MessageSid, ProfileName } = req.body;
+    const { From, Body, MessageSid, ProfileName, SmsStatus, MessageStatus } = req.body;
+
+    // Handle Twilio Status Callbacks directly
+    if (SmsStatus || MessageStatus) {
+      console.log(`Received Twilio message status callback: SID=${MessageSid || req.body.SmsSid}, Status=${SmsStatus || MessageStatus}`);
+      return res.sendStatus(200);
+    }
 
     if (!From) {
       const err = new Error('Invalid Twilio payload. "From" is required.');
