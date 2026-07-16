@@ -5,6 +5,7 @@ const { authenticate, requireAdmin } = require('../middleware/authMiddleware');
 
 // ── Auth (no auth required) ───────────────────────────────────────────────
 router.post('/auth/login', adminCtrl.login);
+router.post('/auth/verify-otp', adminCtrl.verifyOtp);
 
 // ── Protected admin routes ────────────────────────────────────────────────
 router.use(authenticate);

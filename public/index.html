@@ -361,21 +361,17 @@
 
       errorDiv.classList.add('hidden');
 
-      const payload = { username, password };
-      if (otp) {
-        payload.otp = otp;
-      }
-
       try {
-        const res = await fetch(`${API_BASE}/api/admin/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const result = await res.json();
-        
-        if (result.success) {
-          if (result.requireOtp) {
+        if (!otp) {
+          // Step 1: Call credentials login
+          const res = await fetch(`${API_BASE}/api/admin/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const result = await res.json();
+
+          if (result.success && result.requireOtp) {
             // Transition to OTP verification step
             document.getElementById('credentials-fields').classList.add('hidden');
             document.getElementById('otp-field').classList.remove('hidden');
@@ -384,15 +380,26 @@
             // Focus on OTP input
             otpInput.setAttribute('required', 'true');
             otpInput.focus();
-            return;
+          } else {
+            showLoginError(result.message || 'فشل التحقق من اسم المستخدم أو كلمة المرور.');
           }
-
-          // Full success, store token
-          localStorage.setItem('token', result.data.token);
-          localStorage.setItem('user', JSON.stringify(result.data.user));
-          checkAuth();
         } else {
-          showLoginError(result.message || 'فشل تسجيل الدخول.');
+          // Step 2: Call isolated OTP verification
+          const res = await fetch(`${API_BASE}/api/admin/auth/verify-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, otp })
+          });
+          const result = await res.json();
+
+          if (result.success && result.data.token) {
+            // Full success, store token
+            localStorage.setItem('token', result.data.token);
+            localStorage.setItem('user', JSON.stringify(result.data.user));
+            checkAuth();
+          } else {
+            showLoginError(result.message || 'رمز التحقق OTP غير صحيح.');
+          }
         }
       } catch (err) {
         showLoginError('تعذر الاتصال بالخادم. يرجى التأكد من تشغيل المشروع.');

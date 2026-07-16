@@ -14,8 +14,8 @@
   "paths": {
     "/api/admin/auth/login": {
       "post": {
-        "summary": "Admin Login",
-        "description": "Authenticate an administrator or agent, handles optional OTP verification, and returns a JWT token.",
+        "summary": "Admin Login (Step 1)",
+        "description": "Authenticate an administrator or agent credentials. If successful, requests OTP verification.",
         "requestBody": {
           "required": true,
           "content": {
@@ -24,8 +24,7 @@
                 "type": "object",
                 "properties": {
                   "username": { "type": "string", "example": "admin" },
-                  "password": { "type": "string", "example": "admin123" },
-                  "otp": { "type": "string", "example": "123456", "description": "Optional OTP required on second step." }
+                  "password": { "type": "string", "example": "admin123" }
                 },
                 "required": ["username", "password"]
               }
@@ -34,15 +33,51 @@
         },
         "responses": {
           "200": {
-            "description": "Login Successful or OTP Step Requested",
+            "description": "Credentials verified, OTP step required",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "requireOtp": { "type": "boolean", "example": true, "description": "True if credentials are correct but OTP is still needed." },
-                    "message": { "type": "string", "example": "OTP Verification Required." },
+                    "requireOtp": { "type": "boolean", "example": true, "description": "Indicates OTP check is needed." },
+                    "message": { "type": "string", "example": "Credentials valid. OTP required." }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/auth/verify-otp": {
+      "post": {
+        "summary": "Verify OTP (Step 2)",
+        "description": "Verify the OTP verification code and issue the JWT session token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "admin" },
+                  "otp": { "type": "string", "example": "123456" }
+                },
+                "required": ["username", "otp"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP verified successfully. Session started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
                     "data": {
                       "type": "object",
                       "properties": {

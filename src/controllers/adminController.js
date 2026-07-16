@@ -10,7 +10,7 @@ const { Op } = require('sequelize');
  */
 exports.login = async (req, res, next) => {
   try {
-    const { username, password, otp } = req.body;
+    const { username, password } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', message: 'username and password are required.' });
@@ -19,9 +19,57 @@ exports.login = async (req, res, next) => {
     // Check credentials first
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-    let targetUser = null;
 
     if (username === adminUsername && password === adminPassword) {
+      return res.json({
+        success: true,
+        requireOtp: true,
+        message: 'Credentials valid. OTP required.'
+      });
+    }
+
+    // Check database users
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { name: username },
+          { user_id: username }
+        ],
+        user_type: { [Op.in]: ['ADMIN', 'EMPLOYEE', 'AGENT'] },
+        status: 'ACTIVE'
+      }
+    });
+
+    if (!user || password !== adminPassword) {
+      return res.status(401).json({ success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid username or password.' });
+    }
+
+    return res.json({
+      success: true,
+      requireOtp: true,
+      message: 'Credentials valid. OTP required.'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/admin/auth/verify-otp
+ * Body: { username: string, otp: string }
+ */
+exports.verifyOtp = async (req, res, next) => {
+  try {
+    const { username, otp } = req.body;
+
+    if (!username || !otp) {
+      return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', message: 'username and otp are required.' });
+    }
+
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    let targetUser = null;
+
+    if (username === adminUsername) {
       targetUser = {
         user_id: 'admin',
         name: adminUsername,
@@ -29,7 +77,6 @@ exports.login = async (req, res, next) => {
         status: 'ACTIVE'
       };
     } else {
-      // Check database users
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -41,8 +88,8 @@ exports.login = async (req, res, next) => {
         }
       });
 
-      if (!user || password !== adminPassword) {
-        return res.status(401).json({ success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid username or password.' });
+      if (!user) {
+        return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'User not found.' });
       }
 
       targetUser = {
@@ -53,16 +100,8 @@ exports.login = async (req, res, next) => {
       };
     }
 
-    // If credentials are valid, check OTP
+    // Verify OTP code
     const requiredOtp = process.env.ADMIN_OTP || '123456';
-    if (!otp) {
-      return res.json({
-        success: true,
-        requireOtp: true,
-        message: 'OTP Verification Required.'
-      });
-    }
-
     if (otp !== requiredOtp) {
       return res.status(400).json({
         success: false,
@@ -71,7 +110,7 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Credentials and OTP are both valid -> generate session token
+    // Issue JWT token on successful verification
     const token = generateToken(targetUser);
     return res.json({
       success: true,
