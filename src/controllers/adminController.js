@@ -212,15 +212,25 @@ exports.getAdminSessions = async (req, res, next) => {
       order: [['updated_at', 'DESC']]
     });
 
-    // Fetch customers by phone (session_id = phone number)
-    const phones = sessions.map(s => s.session_id);
+    // Fetch customers by phone with robust prefix normalization (+ / 00)
+    const rawPhones = sessions.map(s => s.session_id);
+    const normalizedPhones = rawPhones.map(p => p.replace(/^\+|^00/, '').trim());
+    
     const customers = await Customer.findAll({
-      where: { phone: phones },
+      where: {
+        [Op.or]: [
+          { phone: rawPhones },
+          { phone: normalizedPhones },
+          { phone: normalizedPhones.map(p => '+' + p) }
+        ]
+      },
       include: [{ model: require('../models').User, as: 'user' }]
     });
+
     const customerByPhone = {};
     for (const c of customers) {
-      customerByPhone[c.phone] = c;
+      const norm = c.phone.replace(/^\+|^00/, '').trim();
+      customerByPhone[norm] = c;
     }
 
     // Fetch latest message for each session
@@ -237,7 +247,8 @@ exports.getAdminSessions = async (req, res, next) => {
     }
 
     const data = sessions.map(session => {
-      const customer = customerByPhone[session.session_id];
+      const normSessionPhone = session.session_id.replace(/^\+|^00/, '').trim();
+      const customer = customerByPhone[normSessionPhone];
       const latestMsg = latestBySession[session.session_id];
       return {
         id: session.session_id,
