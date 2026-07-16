@@ -964,42 +964,69 @@ exports.receiveWebhook = async (req, res, next) => {
         res.type('text/xml');
         return res.send(twiml.toString());
       } else {
-        // Case 2: Low confidence (< 20%) -> Create ticket IMMEDIATELY (no restrictions)
-        const ticketId = 'tkt_' + crypto.randomUUID();
-        const detectedRegion = detectRegionByPhone(cleanPhone);
-        
-        const ticketTitle = userLang === 'ar'
-          ? `استفسار ذكاء اصطناعي (غير مجاب عليه) - المهندس: ${displayName}`
-          : `AI Q&A Inquiry (Unanswered) - Eng: ${displayName}`;
+        // Case 2 & 3: Low confidence (< 20%)
+        // Keywords indicating a problem or a request to perform a service/transaction
+        const ticketKeywords = [
+          'مشكلة', 'مشكله', 'عطل', 'خلل', 'شكوى', 'شكوي', 'خطأ', 'خطا',
+          'لا يعمل', 'مش زابط', 'خراب', 'مستعجل', 'تكت', 'تذكره', 'تذكرة',
+          'سجل', 'تسجيل', 'اشتراك', 'تجديد', 'تقاعد', 'تقديم', 'طلب',
+          'error', 'problem', 'issue', 'bug', 'complaint', 'failed', 'not working',
+          'register', 'renew', 'apply', 'ticket', 'pension', 'subscribe'
+        ];
 
-        const ticketContent = userLang === 'ar'
-          ? `[السؤال]: ${incomingBody}\n[درجة الثقة]: ${Math.round((qaResult.score || 0) * 100)}%\n[المنطقة]: ${detectedRegion}`
-          : `[Question]: ${incomingBody}\n[Confidence]: ${Math.round((qaResult.score || 0) * 100)}%\n[Region]: ${detectedRegion}`;
+        const needsTicket = ticketKeywords.some(kw => incomingBody.toLowerCase().includes(kw));
 
-        await Ticket.create({
-          ticket_id: ticketId,
-          ticket_priority: 'MEDIUM',
-          title: ticketTitle,
-          content: ticketContent,
-          ai_confedance: qaResult.score || 0.0,
-          user_id: customer.member_id,
-          status: 'OPEN'
-        });
+        if (needsTicket) {
+          // Case 2: Problem or service request -> Create ticket IMMEDIATELY
+          const ticketId = 'tkt_' + crypto.randomUUID();
+          const detectedRegion = detectRegionByPhone(cleanPhone);
+          
+          const ticketTitle = userLang === 'ar'
+            ? `استفسار ذكاء اصطناعي (غير مجاب عليه) - المهندس: ${displayName}`
+            : `AI Q&A Inquiry (Unanswered) - Eng: ${displayName}`;
 
-        sessionStates.set(cleanPhone, {
-          step: 'AWAITING_RATING',
-          ticketId,
-          lang: userLang
-        });
+          const ticketContent = userLang === 'ar'
+            ? `[السؤال]: ${incomingBody}\n[درجة الثقة]: ${Math.round((qaResult.score || 0) * 100)}%\n[المنطقة]: ${detectedRegion}`
+            : `[Question]: ${incomingBody}\n[Confidence]: ${Math.round((qaResult.score || 0) * 100)}%\n[Region]: ${detectedRegion}`;
 
-        const successText = userLang === 'ar'
-          ? `شكراً لك! تم تسجيل طلبك بنجاح وفتح تذكرة دعم برقم (${ticketId}) لمتابعة استفسارك مع القسم المختص.\n\nيرجى تقييم جودة الخدمة من 1 إلى 5 درجات:`
-          : `Thank you! Your request has been successfully registered and a support ticket (${ticketId}) has been opened to follow up with our team.\n\nPlease rate our service quality from 1 to 5 stars:`;
+          await Ticket.create({
+            ticket_id: ticketId,
+            ticket_priority: 'MEDIUM',
+            title: ticketTitle,
+            content: ticketContent,
+            ai_confedance: qaResult.score || 0.0,
+            user_id: customer.member_id,
+            status: 'OPEN'
+          });
 
-        await recordMessage(session.session_id, successText, 'SERVER', 'TEXT');
-        twiml.message(successText);
-        res.type('text/xml');
-        return res.send(twiml.toString());
+          sessionStates.set(cleanPhone, {
+            step: 'AWAITING_RATING',
+            ticketId,
+            lang: userLang
+          });
+
+          const successText = userLang === 'ar'
+            ? `شكراً لك! تم تسجيل طلبك بنجاح وفتح تذكرة دعم برقم (${ticketId}) لمتابعة استفسارك مع القسم المختص.\n\nيرجى تقييم جودة الخدمة من 1 إلى 5 درجات:`
+            : `Thank you! Your request has been successfully registered and a support ticket (${ticketId}) has been opened to follow up with our team.\n\nPlease rate our service quality from 1 to 5 stars:`;
+
+          await recordMessage(session.session_id, successText, 'SERVER', 'TEXT');
+          twiml.message(successText);
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } else {
+          // Case 3: General query/trivia -> Simply answer "I don't know / couldn't find answer"
+          sessionStates.delete(cleanPhone);
+          await session.update({ status: 'CLOSED' });
+
+          const responseText = userLang === 'ar'
+            ? `عذراً، لم أتمكن من العثور على إجابة لاستفسارك في دليل الخدمات المعتمد.`
+            : `Sorry, I couldn't find an answer to your query in our service guide.`;
+
+          await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
+          twiml.message(responseText);
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        }
       }
     } catch (qaErr) {
       console.error('QA Engine search failed, using default support info:', qaErr.message);
