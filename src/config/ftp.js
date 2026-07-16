@@ -17,7 +17,10 @@ const uploadToFTP = async (localFilePath, remoteFileName) => {
       port: Number.parseInt(process.env.FTP_PORT || '21', 10),
       user: process.env.FTP_USER || 'root',
       password: process.env.FTP_PASSWORD,
-      secure: false
+      secure: true,
+      secureOptions: {
+        rejectUnauthorized: false
+      }
     });
 
     const remoteDir = process.env.FTP_ROOT || '/public_html/uploads';

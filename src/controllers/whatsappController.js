@@ -8,6 +8,35 @@ const { uploadToFTP } = require('../config/ftp');
 const { Customer, User, Session, Message, ServiceCategory, QA, Ticket, Notification, EmployeeServiceCategory, Rating } = require('../models');
 const { getTranslation } = require('../config/localization');
 
+// Helper to download media from a URL, recursively following HTTP redirects
+const downloadMediaWithRedirect = (url, destPath) => {
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    protocol.get(url, (response) => {
+      // Follow HTTP redirects (301, 302, 303, 307, 308)
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        console.log(`Following download redirect to: ${response.headers.location}`);
+        return downloadMediaWithRedirect(response.headers.location, destPath)
+          .then(resolve)
+          .catch(reject);
+      }
+
+      if (response.statusCode !== 200) {
+        return reject(new Error(`Failed to download media: Status ${response.statusCode}`));
+      }
+
+      const file = fs.createWriteStream(destPath);
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close(resolve);
+      });
+    }).on('error', (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
+  });
+};
+
 // Helper to process incoming media attachments and upload them to local FTP
 const processIncomingMedia = async (reqBody) => {
   const numMedia = Number.parseInt(reqBody.NumMedia || '0', 10);
@@ -33,19 +62,8 @@ const processIncomingMedia = async (reqBody) => {
 
     console.log(`Downloading Twilio media: ${mediaUrl} -> ${tempPath}`);
 
-    await new Promise((resolve, reject) => {
-      const file = fs.createWriteStream(tempPath);
-      const protocol = mediaUrl.startsWith('https') ? https : http;
-      protocol.get(mediaUrl, (response) => {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close(resolve);
-        });
-      }).on('error', (err) => {
-        fs.unlink(tempPath, () => {});
-        reject(err);
-      });
-    });
+    // Download following redirects
+    await downloadMediaWithRedirect(mediaUrl, tempPath);
 
     // Upload to FTP
     console.log(`Uploading media to FTP: ${tempFileName}`);
@@ -121,17 +139,82 @@ const recordMessage = async (sessionId, content, from, messageType) => {
   }
 };
 
+// Helper to discover the public URL (checks local ngrok agent API, falling back to host header)
+const getPublicUrl = async (req) => {
+  try {
+    const response = await new Promise((resolve, reject) => {
+      http.get('http://127.0.0.1:4040/api/tunnels', (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(JSON.parse(data)));
+      }).on('error', reject);
+    });
+    if (response.tunnels && response.tunnels.length > 0) {
+      const httpsTunnel = response.tunnels.find(t => t.proto === 'https' || t.public_url.startsWith('https'));
+      if (httpsTunnel) return httpsTunnel.public_url;
+      return response.tunnels[0].public_url;
+    }
+  } catch (err) {
+    // ngrok is not running locally or port 4040 is not accessible
+  }
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  return `${protocol}://${host}`;
+};
+
 /**
  * Send a WhatsApp message
  * POST /api/whatsapp/send
- * Body: { "to": "+1234567890", "message": "Hello World!" }
+ * Body: { "to": "+1234567890", "message": "Hello World!", "mediaUrl": "https://example.com/file.pdf" }
  */
 exports.sendWhatsApp = async (req, res, next) => {
+  let uploadedLocalPaths = [];
   try {
     const { to, message } = req.body;
+    let mediaUrls = [];
 
-    if (!to || !message) {
-      const err = new Error('Fields "to" and "message" are required in the request body.');
+    // Parse existing mediaUrl from body (can be string or array)
+    if (req.body.mediaUrl) {
+      if (Array.isArray(req.body.mediaUrl)) {
+        mediaUrls.push(...req.body.mediaUrl);
+      } else {
+        mediaUrls.push(req.body.mediaUrl);
+      }
+    }
+
+    // Process uploaded files if any (multer upload.any() populates req.files)
+    if (req.files && req.files.length > 0) {
+      const baseUrl = await getPublicUrl(req);
+      for (const file of req.files) {
+        uploadedLocalPaths.push(file.path);
+        console.log(`Uploading multipart file to FTP: ${file.path} -> ${file.filename}`);
+        // Upload to FTP for JEA storage
+        await uploadToFTP(file.path, file.filename);
+        
+        // Expose public HTTP/HTTPS URL for Twilio CDN access
+        const publicHttpUrl = `${baseUrl}/public_uploads/${file.filename}`;
+        console.log(`Generated public URL for Twilio access: ${publicHttpUrl}`);
+        mediaUrls.push(publicHttpUrl);
+        
+        // Schedule local file deletion after 10 minutes to allow Twilio to download asynchronously
+        setTimeout(() => {
+          fs.unlink(file.path, (err) => {
+            if (err && err.code !== 'ENOENT') {
+              console.error('Failed to clean up local uploaded file:', err.message);
+            }
+          });
+        }, 600000);
+      }
+    }
+
+    if (!to) {
+      const err = new Error('Field "to" is required in the request body.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (!message && mediaUrls.length === 0) {
+      const err = new Error('At least one of "message", "mediaUrl" or an uploaded file must be provided.');
       err.statusCode = 400;
       throw err;
     }
@@ -140,23 +223,76 @@ exports.sendWhatsApp = async (req, res, next) => {
     const targetTo = formatWhatsAppNumber(to);
     const client = getTwilioClient();
 
-    console.log(`Sending WhatsApp message to ${targetTo} from ${fromWhatsApp}...`);
+    console.log(`Sending WhatsApp message sequence to ${targetTo} from ${fromWhatsApp}...`);
 
-    const response = await client.messages.create({
+    let primaryResponse = null;
+
+    // Send the first message with text and/or the first media URL
+    const primaryPayload = {
       from: fromWhatsApp,
-      to: targetTo,
-      body: message
-    });
+      to: targetTo
+    };
+    if (message) {
+      primaryPayload.body = message;
+    }
+    if (mediaUrls.length > 0) {
+      primaryPayload.mediaUrl = [mediaUrls[0]];
+    }
+
+    primaryResponse = await client.messages.create(primaryPayload);
+
+    // Send any additional media URLs as separate messages (Twilio limitation of 1 mediaUrl per request)
+    for (let i = 1; i < mediaUrls.length; i++) {
+      console.log(`Sending additional media attachment ${i + 1}/${mediaUrls.length} to ${targetTo}...`);
+      await client.messages.create({
+        from: fromWhatsApp,
+        to: targetTo,
+        mediaUrl: [mediaUrls[i]]
+      });
+    }
+
+    // --- Log the sent messages into the database ---
+    const cleanSessionId = targetTo.replace('whatsapp:', '').trim();
+    const activeSession = await Session.findByPk(cleanSessionId, { paranoid: false });
+    if (!activeSession) {
+      await Session.create({
+        session_id: cleanSessionId,
+        status: 'OPEN',
+        is_handover: false
+      });
+    } else {
+      if (activeSession.deletedAt || activeSession.deleted_at) {
+        await activeSession.restore();
+      }
+      if (activeSession.status !== 'OPEN') {
+        await activeSession.update({ status: 'OPEN' });
+      }
+    }
+
+    if (message) {
+      await recordMessage(cleanSessionId, message, 'SERVER', 'TEXT');
+    }
+    for (const mediaUrl of mediaUrls) {
+      const isPdf = mediaUrl.toLowerCase().includes('.pdf');
+      await recordMessage(cleanSessionId, mediaUrl, 'SERVER', isPdf ? 'DOCUMENT' : 'IMAGE');
+    }
 
     res.json({
       success: true,
-      messageSid: response.sid,
-      status: response.status,
-      to: response.to,
-      from: response.from,
-      body: response.body
+      messageSid: primaryResponse.sid,
+      status: primaryResponse.status,
+      to: primaryResponse.to,
+      from: primaryResponse.from,
+      body: primaryResponse.body,
+      mediaCount: mediaUrls.length
     });
   } catch (err) {
+    // Clean up any remaining temporary files
+    for (const localPath of uploadedLocalPaths) {
+      if (fs.existsSync(localPath)) {
+        fs.unlink(localPath, () => {});
+      }
+    }
     next(err);
   }
 };

@@ -6,7 +6,12 @@ const errorHandler = require('./middleware/errorHandler');
 const logMiddleware = require('./middleware/logMiddleware');
 const langMiddleware = require('./middleware/langMiddleware');
 
+const path = require('node:path');
+
 const app = express();
+
+// Serve uploads statically for Twilio access
+app.use('/public_uploads', express.static(path.join(__dirname, '..', 'tmp_uploads')));
 
 // Middlewares
 app.use(express.json());
