@@ -30,6 +30,14 @@ const initialize = async () => {
     await sequelize.sync({ force: false });
     console.log('Database models synchronized.');
 
+    // Initialize AI Q&A Engine
+    try {
+      const { initQaEngine } = require('./src/services/qaEngine');
+      await initQaEngine();
+    } catch (qaErr) {
+      console.error('Failed to initialize QA Engine:', qaErr.message);
+    }
+
     // Start server listening
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);

@@ -7,6 +7,7 @@ const path = require('node:path');
 const { uploadToFTP } = require('../config/ftp');
 const { Customer, User, Session, Message, ServiceCategory, QA, Ticket, Notification, EmployeeServiceCategory, Rating } = require('../models');
 const { getTranslation } = require('../config/localization');
+const { getAnswer } = require('../services/qaEngine');
 
 // Helper to download media from a URL, recursively following HTTP redirects
 const downloadMediaWithRedirect = (url, destPath) => {
@@ -828,6 +829,58 @@ exports.receiveWebhook = async (req, res, next) => {
       return res.send(twiml.toString());
     }
 
+    // AWAITING_TICKET_CONFIRM step
+    if (state?.step === 'AWAITING_TICKET_CONFIRM') {
+      const userInput = incomingBody.trim().toLowerCase();
+      const isYes = userInput === '1' || userInput === 'yes' || userInput === 'نعم' || userInput === 'y' || userInput === 'ok';
+
+      if (isYes) {
+        const ticketId = 'tkt_' + crypto.randomUUID();
+        const detectedRegion = detectRegionByPhone(cleanPhone);
+        
+        const ticketTitle = userLang === 'ar'
+          ? `استفسار ذكاء اصطناعي (غير مجاب عليه) - المهندس: ${displayName}`
+          : `AI Q&A Inquiry (Unanswered) - Eng: ${displayName}`;
+
+        const ticketContent = userLang === 'ar'
+          ? `[السؤال]: ${state.originalQuestion}\n[درجة الثقة]: ${Math.round((state.score || 0) * 100)}%\n[المنطقة]: ${detectedRegion}`
+          : `[Question]: ${state.originalQuestion}\n[Confidence]: ${Math.round((state.score || 0) * 100)}%\n[Region]: ${detectedRegion}`;
+
+        await Ticket.create({
+          ticket_id: ticketId,
+          ticket_priority: 'MEDIUM',
+          title: ticketTitle,
+          content: ticketContent,
+          ai_confedance: state.score || 0.0,
+          user_id: customer.member_id,
+          status: 'OPEN'
+        });
+
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_RATING',
+          ticketId,
+          lang: userLang
+        });
+
+        const reply = getTranslation(userLang, 'ratingPrompt');
+        await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+
+        twiml.message(reply);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      } else {
+        sessionStates.delete(cleanPhone);
+        await session.update({ status: 'CLOSED' });
+
+        const reply = getTranslation(userLang, 'ticketCancel');
+        await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+
+        twiml.message(reply);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+    }
+
     // AWAITING_TEMPLATE step
     if (state?.step === 'AWAITING_TEMPLATE') {
       const userInput = incomingBody.trim();
@@ -875,41 +928,52 @@ exports.receiveWebhook = async (req, res, next) => {
     }
 
     // ========================================================
-    // Natural Language Search / Handover fallback
+    // AI Q&A Engine / Natural Language Search
     // ========================================================
-    const words = incomingBody.trim().split(/\s+/).filter(w => w.length >= 3);
-    let qaMatch = null;
+    try {
+      const qaResult = await getAnswer(incomingBody, userLang);
 
-    if (words.length > 0) {
-      const allQAs = await QA.findAll({ where: { status: 'ACTIVE' } });
-      qaMatch = allQAs.find(qa => {
-        const matchCount = words.filter(word => qa.content.toLowerCase().includes(word.toLowerCase())).length;
-        return matchCount >= Math.min(words.length, 2);
-      });
-    }
+      if (qaResult.canAnswer) {
+        sessionStates.delete(cleanPhone);
+        await session.update({ status: 'CLOSED' });
+        await recordMessage(session.session_id, qaResult.answer, 'SERVER', 'TEXT');
+        
+        twiml.message(qaResult.answer);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      } else {
+        const scorePercentage = Math.round(qaResult.score * 100);
+        const replyText = getTranslation(userLang, 'cantAnswerMsg', { score: scorePercentage });
 
-    if (qaMatch) {
-      await recordMessage(session.session_id, qaMatch.content, 'SERVER', 'TEXT');
-      twiml.message(qaMatch.content);
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_TICKET_CONFIRM',
+          originalQuestion: incomingBody,
+          score: qaResult.score,
+          lang: userLang
+        });
+
+        await recordMessage(session.session_id, replyText, 'SERVER', 'TEXT');
+        twiml.message(replyText);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+    } catch (qaErr) {
+      console.error('QA Engine search failed, using default support info:', qaErr.message);
+      const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
+      const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}: ${c.contact_number || '+962 6 500 0000'}`).join('\n');
+      
+      const replyText = userLang === 'ar'
+        ? `عذراً، لم أتمكن من العثور على إجابة لاستفسارك.\n\nيرجى التواصل مباشرة مع أحد أقسامنا عبر الأرقام التالية لمساعدتك بشكل أفضل:\n${categoryList}`
+        : `Sorry, I couldn't find an answer to your query.\n\nPlease contact our departments directly using these numbers to assist you:\n${categoryList}`;
+
+      sessionStates.delete(cleanPhone);
+      await session.update({ status: 'CLOSED' });
+      await recordMessage(session.session_id, replyText, 'SERVER', 'TEXT');
+
+      twiml.message(replyText);
       res.type('text/xml');
       return res.send(twiml.toString());
     }
-
-    // Handover fallback: request does not exist in QA (displays departments list and direct numbers)
-    const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
-    const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}: ${c.contact_number || '+962 6 500 0000'}`).join('\n');
-    
-    const replyText = userLang === 'ar'
-      ? `عذراً، لم أتمكن من العثور على إجابة لاستفسارك.\n\nيرجى التواصل مباشرة مع أحد أقسامنا عبر الأرقام التالية لمساعدتك بشكل أفضل:\n${categoryList}`
-      : `Sorry, I couldn't find an answer to your query.\n\nPlease contact our departments directly using these numbers to assist you:\n${categoryList}`;
-
-    sessionStates.delete(cleanPhone);
-    await session.update({ status: 'CLOSED' });
-    await recordMessage(session.session_id, replyText, 'SERVER', 'TEXT');
-
-    twiml.message(replyText);
-    res.type('text/xml');
-    res.send(twiml.toString());
   } catch (err) {
     console.error('Webhook error occurred:', err);
     try {

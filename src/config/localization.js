@@ -18,7 +18,9 @@ const translations = {
     ratingPrompt: "Thank you! Your request has been registered.\n\nPlease rate our service from 1 to 5 stars (1 = Lowest, 5 = Highest):",
     ratingInvalid: "Invalid rating. Please reply with a single number from 1 to 5:",
     commentPrompt: "Thank you for rating! You can now optionally write any comment/feedback. Reply with 'none' or 'no' if you do not want to add comments.",
-    ratingSuccess: "✅ Request and evaluation registered successfully!\n\nTicket Ref: {ticketId}\nRating: {rating} Stars\n\nReply 'hello' at any time to return to the main menu."
+    ratingSuccess: "✅ Request and evaluation registered successfully!\n\nTicket Ref: {ticketId}\nRating: {rating} Stars\n\nReply 'hello' at any time to return to the main menu.",
+    cantAnswerMsg: "⚠️ I couldn't find a confident answer to your question (Confidence: {score}%).\n\nWould you like to open a support ticket to follow up with our team?\n1. Yes, open a ticket\n2. No, return to main menu",
+    ticketCancel: "Understood. Returning to the main menu. Send 'hello' to start again."
   },
   ar: {
     contactSupport: "يرجى التواصل مع خدمة العملاء.",
@@ -39,7 +41,9 @@ const translations = {
     ratingPrompt: "شكراً لك! تم تسجيل طلبك بنجاح.\n\nيرجى تقييم جودة الخدمة من 1 إلى 5 درجات (حيث 1 الأدنى و 5 الأعلى):",
     ratingInvalid: "تقييم غير صحيح. يرجى الرد برقم واحد من 1 إلى 5:",
     commentPrompt: "شكراً لك على التقييم! يمكنك الآن كتابة أي ملاحظة أو تعليق إضافي بشكل اختياري. أرسل 'لا' أو 'none' إذا كنت لا ترغب في إضافة تعليق.",
-    ratingSuccess: "✅ تم تسجيل طلبك وتقييمك بنجاح!\n\nرقم التذكرة: {ticketId}\nالتقييم: {rating} درجات\n\nأرسل 'مرحبا' في أي وقت للعودة إلى القائمة الرئيسية."
+    ratingSuccess: "✅ تم تسجيل طلبك وتقييمك بنجاح!\n\nرقم التذكرة: {ticketId}\nالتقييم: {rating} درجات\n\nأرسل 'مرحبا' في أي وقت للعودة إلى القائمة الرئيسية.",
+    cantAnswerMsg: "⚠️ لم أتمكن من العثور على إجابة مؤكدة لسؤالك (درجة الثقة: {score}%).\n\nهل ترغب في فتح تذكرة دعم لمتابعة طلبك مع الفريق المختص؟\n1. نعم، افتح تذكرة\n2. لا، العودة للقائمة الرئيسية",
+    ticketCancel: "تم الإلغاء. العودة إلى القائمة الرئيسية. أرسل 'مرحبا' للبدء من جديد."
   }
 };
 

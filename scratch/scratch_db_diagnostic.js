@@ -1,7 +1,16 @@
-const path = require('path');
-require('dotenv').config();
+const path = require("path");
+require("dotenv").config();
 
-const { User, Employee, Customer, Session, Message, Ticket, ServiceCategory, QA } = require('../src/models');
+const {
+  User,
+  Employee,
+  Customer,
+  Session,
+  Message,
+  Ticket,
+  ServiceCategory,
+  QA,
+} = require("../src/models");
 
 async function checkDatabase() {
   try {
@@ -14,7 +23,7 @@ async function checkDatabase() {
     const serviceCategoryCount = await ServiceCategory.count();
     const qaCount = await QA.count();
 
-    console.log('=== Database Diagnostic Summary ===');
+    console.log("=== Database Diagnostic Summary ===");
     console.log(`Users: ${userCount}`);
     console.log(`Employees: ${employeeCount}`);
     console.log(`Customers: ${customerCount}`);
@@ -24,31 +33,39 @@ async function checkDatabase() {
     console.log(`Service Categories: ${serviceCategoryCount}`);
     console.log(`QAs (Knowledge Base): ${qaCount}`);
 
-    console.log('\n=== Service Categories ===');
+    console.log("\n=== Service Categories ===");
     const categories = await ServiceCategory.findAll();
     for (const cat of categories) {
-      console.log(`- ID: ${cat.service_id}, Name: ${cat.service_name}, Status: ${cat.status}`);
+      console.log(
+        `- ID: ${cat.service_id}, Name: ${cat.service_name}, Status: ${cat.status}`,
+      );
     }
 
-    console.log('\n=== QAs ===');
-    const qas = await QA.findAll({ include: [{ model: ServiceCategory, as: 'serviceCategory' }] });
+    console.log("\n=== QAs ===");
+    const qas = await QA.findAll({
+      include: [{ model: ServiceCategory, as: "serviceCategory" }],
+    });
     for (const qa of qas) {
-      console.log(`- ID: ${qa.id}, Category: ${qa.serviceCategory?.service_name}, Content Length: ${qa.content.length}`);
+      console.log(
+        `- ID: ${qa.id}, Category: ${qa.serviceCategory?.service_name}, Content Length: ${qa.content.length}`,
+      );
       console.log(`  Content Preview: ${qa.content.slice(0, 150)}...\n`);
     }
 
-    console.log('\n=== Sample Customers ===');
+    console.log("\n=== Sample Customers ===");
     const customers = await Customer.findAll({
       limit: 10,
-      include: [{ model: User, as: 'user' }]
+      include: [{ model: User, as: "user" }],
     });
     for (const c of customers) {
-      console.log(`- Member ID: ${c.member_id}, Phone: ${c.phone}, Name: ${c.user?.name || 'N/A'}, Role: ${c.role}`);
+      console.log(
+        `- Member ID: ${c.member_id}, Phone: ${c.phone}, Name: ${c.user?.name || "N/A"}, Role: ${c.role}`,
+      );
     }
 
     process.exit(0);
   } catch (err) {
-    console.error('Diagnostic error:', err);
+    console.error("Diagnostic error:", err);
     process.exit(1);
   }
 }

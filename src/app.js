@@ -1,55 +1,27 @@
-const express = require('express');
-const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json');
-const apiRoutes = require('./routes/api');
-const adminRoutes = require('./routes/adminRoutes');
-const errorHandler = require('./middleware/errorHandler');
-const logMiddleware = require('./middleware/logMiddleware');
-const langMiddleware = require('./middleware/langMiddleware');
+const express = require("express");
+const swaggerUi = require("swagger-ui-express");
+const swaggerDocument = require("./swagger.json");
+const apiRoutes = require("./routes/api");
+const adminRoutes = require("./routes/adminRoutes");
+const errorHandler = require("./middleware/errorHandler");
+const logMiddleware = require("./middleware/logMiddleware");
+const langMiddleware = require("./middleware/langMiddleware");
 
-const helmet = require('helmet');
-const path = require('node:path');
+const helmet = require("helmet");
+const path = require("node:path");
 
 const app = express();
 
 // Secure HTTP Headers (Helmet) with permissive CSP for Tailwind / Lucide CDNs
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://*", "http://*"],
-      connectSrc: ["'self'", "http://localhost:3000", "ws://localhost:3000", "http://127.0.0.1:3000"]
-    }
-  }
-}));
-
-
-// CORS — allow the React admin panel (port 5173) to reach the API
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const allowed = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-    'http://127.0.0.1:5173'
-  ];
-  if (!origin || allowed.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
 
 // Serve uploads statically for Twilio access
-app.use('/public_uploads', express.static(path.join(__dirname, '..', 'tmp_uploads')));
+app.use(
+  "/public_uploads",
+  express.static(path.join(__dirname, "..", "tmp_uploads")),
+);
 
 // Serve admin panel static files
-app.use('/admin', express.static(path.join(__dirname, '..', 'public')));
+app.use("/admin", express.static(path.join(__dirname, "..", "public")));
 
 // Middlewares
 app.use(express.json());
@@ -58,36 +30,42 @@ app.use(logMiddleware);
 app.use(langMiddleware);
 
 // Swagger UI Route
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Admin API Routes (auth + admin panel endpoints)
-app.use('/api/admin', adminRoutes);
+app.use("/api/admin", adminRoutes);
 
 // API Routes (WhatsApp webhook + send)
-app.use('/api', apiRoutes);
+app.use("/api", apiRoutes);
 
 // Dedicated CRUD Service Routes
-app.use('/api/v1/users', require('./routes/userRoutes'));
-app.use('/api/v1/employees', require('./routes/employeeRoutes'));
-app.use('/api/v1/customers', require('./routes/customerRoutes'));
-app.use('/api/v1/sessions', require('./routes/sessionRoutes'));
-app.use('/api/v1/messages', require('./routes/messageRoutes'));
-app.use('/api/v1/campaigns', require('./routes/campaignRoutes'));
-app.use('/api/v1/ratings', require('./routes/ratingRoutes'));
-app.use('/api/v1/tickets', require('./routes/ticketRoutes'));
-app.use('/api/v1/service-categories', require('./routes/serviceCategoryRoutes'));
-app.use('/api/v1/employee-service-categories', require('./routes/employeeServiceCategoryRoutes'));
-app.use('/api/v1/qas', require('./routes/qaRoutes'));
-app.use('/api/v1/notifications', require('./routes/notificationRoutes'));
-app.use('/api/v1/audit-logs', require('./routes/auditLogRoutes'));
-app.use('/api/v1/upload', require('./routes/uploadRoutes'));
+app.use("/api/v1/users", require("./routes/userRoutes"));
+app.use("/api/v1/employees", require("./routes/employeeRoutes"));
+app.use("/api/v1/customers", require("./routes/customerRoutes"));
+app.use("/api/v1/sessions", require("./routes/sessionRoutes"));
+app.use("/api/v1/messages", require("./routes/messageRoutes"));
+app.use("/api/v1/campaigns", require("./routes/campaignRoutes"));
+app.use("/api/v1/ratings", require("./routes/ratingRoutes"));
+app.use("/api/v1/tickets", require("./routes/ticketRoutes"));
+app.use(
+  "/api/v1/service-categories",
+  require("./routes/serviceCategoryRoutes"),
+);
+app.use(
+  "/api/v1/employee-service-categories",
+  require("./routes/employeeServiceCategoryRoutes"),
+);
+app.use("/api/v1/qas", require("./routes/qaRoutes"));
+app.use("/api/v1/notifications", require("./routes/notificationRoutes"));
+app.use("/api/v1/audit-logs", require("./routes/auditLogRoutes"));
+app.use("/api/v1/upload", require("./routes/uploadRoutes"));
 
 // Root route redirect/status
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.json({
-    message: 'Welcome to the JEA Demo Express Backend API',
-    status: 'healthy',
-    documentation: '/api-docs'
+    message: "Welcome to the JEA Demo Express Backend API",
+    status: "healthy",
+    documentation: "/api-docs",
   });
 });
 

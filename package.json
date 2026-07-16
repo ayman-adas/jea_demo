@@ -22,6 +22,8 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "mysql2": "^3.23.0",
+    "natural": "^8.1.1",
+    "pdf-parse": "^2.4.5",
     "sequelize": "^6.37.8",
     "swagger-ui-express": "^5.0.1",
     "twilio": "^6.0.2",
