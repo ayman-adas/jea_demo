@@ -1,5 +1,6 @@
 const { User, Session, Message, Ticket, Customer } = require('../models');
-const { generateToken } = require('../middleware/authMiddleware');
+const { generateAccessToken, generateRefreshToken, JWT_REFRESH_SECRET } = require('../middleware/authMiddleware');
+const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
 /**
@@ -110,15 +111,79 @@ exports.verifyOtp = async (req, res, next) => {
       });
     }
 
-    // Issue JWT token on successful verification
-    const token = generateToken(targetUser);
+    // Issue JWT access and refresh tokens on successful verification
+    const accessToken = generateAccessToken(targetUser);
+    const refreshToken = generateRefreshToken(targetUser);
     return res.json({
       success: true,
       data: {
-        token,
+        token: accessToken, // for backward compatibility
+        accessToken,
+        refreshToken,
         user: targetUser
       }
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/admin/auth/refresh-token
+ * Body: { refreshToken: string }
+ * Exchanges a valid refresh token for a new set of access/refresh tokens
+ */
+exports.refreshToken = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        code: 'REFRESH_TOKEN_REQUIRED',
+        message: 'Refresh token is required.'
+      });
+    }
+
+    try {
+      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+
+      // Verify the user is still active in the database
+      const user = await User.findByPk(decoded.user_id);
+      if (!user || user.status !== 'ACTIVE') {
+        return res.status(403).json({
+          success: false,
+          code: 'USER_INACTIVE',
+          message: 'User is inactive or not found.'
+        });
+      }
+
+      const targetUser = {
+        user_id: user.user_id,
+        name: user.name,
+        user_type: user.user_type,
+        status: user.status
+      };
+
+      const newAccessToken = generateAccessToken(targetUser);
+      const newRefreshToken = generateRefreshToken(targetUser);
+
+      return res.json({
+        success: true,
+        data: {
+          token: newAccessToken, // backward compatibility
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+          user: targetUser
+        }
+      });
+    } catch (jwtErr) {
+      return res.status(401).json({
+        success: false,
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'رمز تجديد الجلسة غير صالح أو منتهي الصلاحية.'
+      });
+    }
   } catch (err) {
     next(err);
   }

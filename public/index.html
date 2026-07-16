@@ -323,6 +323,69 @@
   <!-- Main JavaScript client -->
   <script>
     const API_BASE = window.location.origin;
+    
+    // Global fetch interceptor for auth headers and transparent token refresh
+    const originalFetch = window.fetch;
+    window.fetch = async function (url, options = {}) {
+      options.headers = options.headers || {};
+      
+      // Inject bearer token for protected API calls (excluding public auth routes)
+      if (url.includes('/api/admin/') && !url.includes('/api/admin/auth/')) {
+        const token = localStorage.getItem('token');
+        if (token) {
+          options.headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+      
+      let response = await originalFetch(url, options);
+      
+      // Handle token expiration (401 Unauthorized) by attempting refresh
+      if (response.status === 401 && url.includes('/api/admin/') && !url.includes('/api/admin/auth/')) {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          try {
+            console.log('Access token expired. Attempting token refresh...');
+            const refreshRes = await originalFetch(`${API_BASE}/api/admin/auth/refresh-token`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken })
+            });
+            const refreshData = await refreshRes.json();
+            
+            if (refreshData.success && refreshData.data.accessToken) {
+              // Store new tokens
+              localStorage.setItem('token', refreshData.data.accessToken);
+              localStorage.setItem('refreshToken', refreshData.data.refreshToken);
+              
+              // Retry original request with new token
+              options.headers['Authorization'] = `Bearer ${refreshData.data.accessToken}`;
+              response = await originalFetch(url, options);
+            } else {
+              // Refresh failed, clear auth and force login
+              localStorage.removeItem('token');
+              localStorage.removeItem('refreshToken');
+              localStorage.removeItem('user');
+              checkAuth();
+            }
+          } catch (refreshErr) {
+            console.error('Error refreshing token:', refreshErr);
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            checkAuth();
+          }
+        } else {
+          // No refresh token, clear auth and force login
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          checkAuth();
+        }
+      }
+      
+      return response;
+    };
+
     let selectedSessionId = null;
     let pollInterval = null;
     let dashboardInterval = null;
@@ -392,9 +455,12 @@
           });
           const result = await res.json();
 
-          if (result.success && result.data.token) {
+          if (result.success && (result.data.accessToken || result.data.token)) {
             // Full success, store token
-            localStorage.setItem('token', result.data.token);
+            localStorage.setItem('token', result.data.accessToken || result.data.token);
+            if (result.data.refreshToken) {
+              localStorage.setItem('refreshToken', result.data.refreshToken);
+            }
             localStorage.setItem('user', JSON.stringify(result.data.user));
             checkAuth();
           } else {
@@ -416,6 +482,7 @@
     // Logout
     document.getElementById('logout-btn').addEventListener('click', () => {
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       stopPolling();
       checkAuth();

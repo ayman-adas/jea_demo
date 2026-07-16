@@ -1,12 +1,14 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jea-demo-secret-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || (JWT_SECRET + '-refresh-token-secret-key-2026');
+const JWT_ACCESS_EXPIRES_IN = '1h'; // 1 hour access token
+const JWT_REFRESH_EXPIRES_IN = '7d'; // 7 days refresh token
 
 /**
- * Generate a JWT token for a user
+ * Generate a JWT access token for a user
  */
-const generateToken = (user) => {
+const generateAccessToken = (user) => {
   return jwt.sign(
     {
       user_id: user.user_id,
@@ -15,8 +17,28 @@ const generateToken = (user) => {
       status: user.status
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    { expiresIn: JWT_ACCESS_EXPIRES_IN }
   );
+};
+
+/**
+ * Generate a JWT refresh token for a user
+ */
+const generateRefreshToken = (user) => {
+  return jwt.sign(
+    {
+      user_id: user.user_id
+    },
+    JWT_REFRESH_SECRET,
+    { expiresIn: JWT_REFRESH_EXPIRES_IN }
+  );
+};
+
+/**
+ * Generate a JWT token for a user (backward compatibility)
+ */
+const generateToken = (user) => {
+  return generateAccessToken(user);
 };
 
 /**
@@ -52,4 +74,11 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { generateToken, authenticate, requireAdmin };
+module.exports = { 
+  generateToken, 
+  generateAccessToken, 
+  generateRefreshToken, 
+  authenticate, 
+  requireAdmin,
+  JWT_REFRESH_SECRET: JWT_REFRESH_SECRET
+};

@@ -9,6 +9,7 @@ const { validateLogin, validateOtp } = require('../middleware/validationMiddlewa
 // ── Auth (no auth required) ───────────────────────────────────────────────
 router.post('/auth/login', authLimiter, validateLogin, adminCtrl.login);
 router.post('/auth/verify-otp', authLimiter, validateOtp, adminCtrl.verifyOtp);
+router.post('/auth/refresh-token', authLimiter, adminCtrl.refreshToken);
 
 // ── Protected admin routes ────────────────────────────────────────────────
 router.use(authenticate);

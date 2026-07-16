@@ -82,6 +82,8 @@
                       "type": "object",
                       "properties": {
                         "token": { "type": "string", "example": "eyJhbGciOi..." },
+                        "accessToken": { "type": "string", "example": "eyJhbGciOi..." },
+                        "refreshToken": { "type": "string", "example": "eyJhbGciOi..." },
                         "user": {
                           "type": "object",
                           "properties": {
@@ -97,6 +99,61 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/admin/auth/refresh-token": {
+      "post": {
+        "summary": "Refresh Access Token",
+        "description": "Exchange a valid refresh token for a new access token and a new refresh token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refreshToken": { "type": "string", "example": "eyJhbGciOi..." }
+                },
+                "required": ["refreshToken"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens refreshed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": { "type": "string", "example": "eyJhbGciOi..." },
+                        "accessToken": { "type": "string", "example": "eyJhbGciOi..." },
+                        "refreshToken": { "type": "string", "example": "eyJhbGciOi..." },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "user_id": { "type": "string", "example": "admin" },
+                            "name": { "type": "string", "example": "admin" },
+                            "user_type": { "type": "string", "example": "ADMIN" },
+                            "status": { "type": "string", "example": "ACTIVE" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired refresh token"
           }
         }
       }
