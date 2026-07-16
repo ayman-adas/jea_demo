@@ -2,6 +2,7 @@ const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./swagger.json');
 const apiRoutes = require('./routes/api');
+const adminRoutes = require('./routes/adminRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const logMiddleware = require('./middleware/logMiddleware');
 const langMiddleware = require('./middleware/langMiddleware');
@@ -10,8 +11,29 @@ const path = require('node:path');
 
 const app = express();
 
+// CORS — allow the React admin panel (port 5173) to reach the API
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173'
+  ];
+  if (!origin || allowed.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // Serve uploads statically for Twilio access
 app.use('/public_uploads', express.static(path.join(__dirname, '..', 'tmp_uploads')));
+
+// Serve admin panel static files
+app.use('/admin', express.static(path.join(__dirname, '..', 'public')));
 
 // Middlewares
 app.use(express.json());
@@ -22,7 +44,10 @@ app.use(langMiddleware);
 // Swagger UI Route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// API Routes
+// Admin API Routes (auth + admin panel endpoints)
+app.use('/api/admin', adminRoutes);
+
+// API Routes (WhatsApp webhook + send)
 app.use('/api', apiRoutes);
 
 // Dedicated CRUD Service Routes

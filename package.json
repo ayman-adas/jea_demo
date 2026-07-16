@@ -13,8 +13,10 @@
   "license": "ISC",
   "dependencies": {
     "basic-ftp": "^6.0.1",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "mysql2": "^3.23.0",
     "sequelize": "^6.37.8",

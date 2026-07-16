@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة التحكم | المساعد الرقمي لنقابة المهندسين الأردنيين</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Cairo & IBM Plex Sans Arabic -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: 'IBM Plex Sans Arabic', 'Cairo', sans-serif;
+      background-color: #f8fafc;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+  <!-- ==================== LOGIN CONTAINER ==================== -->
+  <div id="login-container" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
+    <div class="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl border border-slate-100 animate-fade-in mx-4">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 bg-blue-50 text-blue-900 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
+          <i data-lucide="shield-check" class="w-8 h-8"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800">نقابة المهندسين الأردنيين</h2>
+        <p class="text-slate-500 text-sm mt-1">بوابة العمليات والمساعد الرقمي</p>
+      </div>
+
+      <div id="login-error" class="hidden bg-red-50 text-red-600 border border-red-100 px-4 py-3 rounded-xl mb-4 text-sm flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+        <span id="login-error-text">اسم المستخدم أو كلمة المرور غير صحيحة.</span>
+      </div>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">اسم المستخدم</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400">
+              <i data-lucide="user" class="w-4 h-4"></i>
+            </span>
+            <input type="text" id="login-username" value="admin" required
+              class="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition"
+              placeholder="username">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">كلمة المرور</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400">
+              <i data-lucide="lock" class="w-4 h-4"></i>
+            </span>
+            <input type="password" id="login-password" value="admin123" required
+              class="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition"
+              placeholder="••••••••">
+          </div>
+        </div>
+
+        <button type="submit" id="login-submit"
+          class="w-full py-2.5 bg-blue-900 text-white rounded-xl font-semibold hover:bg-blue-850 active:scale-95 transition flex items-center justify-center gap-2">
+          <span>تسجيل الدخول</span>
+          <i data-lucide="log-in" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+      <p class="text-center text-xs text-slate-400 mt-4">
+        بيانات الدخول الافتراضية: <span class="font-mono text-slate-600">admin / admin123</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN PLATFORM ==================== -->
+  <div id="app-container" class="hidden flex-1 flex flex-col h-full overflow-hidden">
+    <!-- Header -->
+    <header class="bg-blue-900 text-white px-6 py-4 flex items-center justify-between shadow-md z-10 shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+          <i data-lucide="message-square" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold">بوابة المساعد الرقمي</h1>
+          <p class="text-xs text-blue-200">نقابة المهندسين الأردنيين</p>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-2">
+        <button id="nav-dashboard" class="px-4 py-2 rounded-xl text-sm font-medium transition bg-white/15 text-white flex items-center gap-2">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>الرئيسية</span>
+        </button>
+        <button id="nav-inbox" class="px-4 py-2 rounded-xl text-sm font-medium transition text-blue-100 hover:bg-white/10 flex items-center gap-2">
+          <i data-lucide="inbox" class="w-4 h-4"></i>
+          <span>صندوق الوارد</span>
+        </button>
+      </nav>
+
+      <div class="flex items-center gap-3">
+        <div class="text-left hidden md:block">
+          <p id="user-display-name" class="text-sm font-semibold">مسؤول النظام</p>
+          <p class="text-[10px] text-blue-200">نوع المستخدم: ADMIN</p>
+        </div>
+        <button id="logout-btn" class="w-10 h-10 rounded-xl bg-white/10 text-white hover:bg-red-600/20 hover:text-red-300 transition flex items-center justify-center" title="تسجيل الخروج">
+          <i data-lucide="log-out" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Content Sections -->
+    <main class="flex-1 overflow-hidden relative">
+      
+      <!-- ==================== DASHBOARD SECTION ==================== -->
+      <section id="section-dashboard" class="absolute inset-0 overflow-y-auto p-6 space-y-6">
+        <div class="max-w-7xl mx-auto space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-2xl font-bold text-slate-800">إحصائيات المنصة العامة</h2>
+            <button id="refresh-dashboard" class="p-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition flex items-center gap-1.5 text-sm">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>تحديث</span>
+            </button>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5">
+              <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                <i data-lucide="message-circle" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-sm text-slate-500">المحادثات المفتوحة</p>
+                <h3 id="stat-open-sessions" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5">
+              <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                <i data-lucide="user-cog" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-sm text-slate-500">محادثات الدعم البشري</p>
+                <h3 id="stat-handover-sessions" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5">
+              <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center shrink-0">
+                <i data-lucide="ticket" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-sm text-slate-500">التذاكر النشطة</p>
+                <h3 id="stat-open-tickets" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5">
+              <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+                <i data-lucide="users" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-sm text-slate-500">إجمالي المشتركين</p>
+                <h3 id="stat-total-customers" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Columns -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left: Quick Actions -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+              <h3 class="font-bold text-slate-800 text-lg">روابط سريعة</h3>
+              <div class="grid grid-cols-1 gap-3">
+                <a href="/api-docs" target="_blank" class="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition rounded-xl text-slate-700 font-medium">
+                  <div class="flex items-center gap-3">
+                    <i data-lucide="book-open" class="text-slate-500 w-5 h-5"></i>
+                    <span>توثيق الـ API (Swagger)</span>
+                  </div>
+                  <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                </a>
+                <button id="go-to-inbox-btn" class="w-full flex items-center justify-between p-4 bg-blue-50/50 hover:bg-blue-50 transition rounded-xl text-blue-900 font-medium">
+                  <div class="flex items-center gap-3">
+                    <i data-lucide="message-square" class="text-blue-900 w-5 h-5"></i>
+                    <span>فتح صندوق الوارد والدردشات</span>
+                  </div>
+                  <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: Recent Messages Log -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2 space-y-4">
+              <h3 class="font-bold text-slate-800 text-lg">آخر الرسائل الواردة</h3>
+              <div id="recent-messages-list" class="space-y-3">
+                <!-- Message row template -->
+                <p class="text-slate-500 text-sm">جاري تحميل آخر الرسائل...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== INBOX SECTION ==================== -->
+      <section id="section-inbox" class="absolute inset-0 hidden flex h-full overflow-hidden">
+        
+        <!-- Sidebar: Chat sessions list -->
+        <div class="w-96 border-l border-slate-200 bg-white h-full flex flex-col shrink-0">
+          <div class="p-4 border-b border-slate-100 shrink-0">
+            <h3 class="font-bold text-slate-800 text-lg">المحادثات النشطة</h3>
+            <div class="mt-2 relative">
+              <input type="text" id="session-search" placeholder="بحث برقم الهاتف..."
+                class="w-full pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600">
+              <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400">
+                <i data-lucide="search" class="w-4 h-4"></i>
+              </span>
+            </div>
+          </div>
+
+          <!-- Sessions List scroll area -->
+          <div id="sessions-list-container" class="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
+            <!-- Dynamically populated -->
+            <p class="text-center text-slate-500 text-sm py-8">جاري تحميل المحادثات...</p>
+          </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div id="chat-area" class="flex-1 bg-slate-50 h-full flex flex-col relative overflow-hidden">
+          
+          <!-- No chat selected state -->
+          <div id="no-chat-selected" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-50 z-10">
+            <div class="w-20 h-20 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+              <i data-lucide="message-square" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-700">الرجاء اختيار محادثة</h3>
+            <p class="text-slate-500 text-sm mt-1 max-w-sm">اختر إحدى المحادثات من القائمة الجانبية لبدء استعراض السجل وإرسال ردود مباشرة.</p>
+          </div>
+
+          <!-- Active Chat Header -->
+          <div class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-bold" id="chat-header-avatar">
+                -
+              </div>
+              <div>
+                <h4 class="font-bold text-slate-800" id="chat-header-name">اسم المستخدم</h4>
+                <p class="text-xs text-slate-400" id="chat-header-phone">9627xxxxxxxx</p>
+              </div>
+            </div>
+
+            <!-- Handover & Status Controls -->
+            <div class="flex items-center gap-2">
+              <div class="flex bg-slate-100 p-1 rounded-xl">
+                <button id="mode-bot-btn" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1">
+                  <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                  <span>رد تلقائي (Bot)</span>
+                </button>
+                <button id="mode-human-btn" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1">
+                  <i data-lucide="user" class="w-3.5 h-3.5"></i>
+                  <span>بشري (Human)</span>
+                </button>
+              </div>
+
+              <div class="h-6 w-px bg-slate-200 mx-1"></div>
+
+              <button id="close-session-btn" class="px-4 py-2 border border-red-200 hover:bg-red-50 text-red-600 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                <span>إغلاق المحادثة</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Message History Window -->
+          <div id="chat-messages-container" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+            <!-- Message bubble lists -->
+          </div>
+
+          <!-- Bottom Input Area -->
+          <div class="bg-white border-t border-slate-200 p-4 shrink-0">
+            <form id="chat-send-form" class="flex gap-3">
+              <input type="text" id="chat-input-text" placeholder="اكتب ردك البشري المباشر للمهندس..." required
+                class="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600">
+              
+              <button type="submit" class="px-6 bg-blue-900 text-white rounded-xl hover:bg-blue-850 active:scale-95 transition flex items-center gap-2 font-semibold">
+                <span>إرسال</span>
+                <i data-lucide="send" class="w-4 h-4"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Main JavaScript client -->
+  <script>
+    const API_BASE = window.location.origin;
+    let selectedSessionId = null;
+    let pollInterval = null;
+    let dashboardInterval = null;
+
+    // Helper: Auth Token
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function checkAuth() {
+      const token = getToken();
+      if (!token) {
+        document.getElementById('login-container').classList.remove('hidden');
+        document.getElementById('app-container').classList.add('hidden');
+      } else {
+        document.getElementById('login-container').classList.add('hidden');
+        document.getElementById('app-container').classList.remove('hidden');
+        initDashboard();
+      }
+    }
+
+    // Login Form Handler
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+      const errorDiv = document.getElementById('login-error');
+
+      errorDiv.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const result = await res.json();
+        
+        if (result.success && result.data.token) {
+          localStorage.setItem('token', result.data.token);
+          localStorage.setItem('user', JSON.stringify(result.data.user));
+          checkAuth();
+        } else {
+          showLoginError(result.message || 'فشل تسجيل الدخول.');
+        }
+      } catch (err) {
+        showLoginError('تعذر الاتصال بالخادم. يرجى التأكد من تشغيل المشروع.');
+      }
+    });
+
+    function showLoginError(msg) {
+      const errorDiv = document.getElementById('login-error');
+      const errorText = document.getElementById('login-error-text');
+      errorText.textContent = msg;
+      errorDiv.classList.remove('hidden');
+    }
+
+    // Logout
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      stopPolling();
+      checkAuth();
+    });
+
+    // Navigation Tabs Switching
+    const navDashboard = document.getElementById('nav-dashboard');
+    const navInbox = document.getElementById('nav-inbox');
+    const secDashboard = document.getElementById('section-dashboard');
+    const secInbox = document.getElementById('section-inbox');
+
+    navDashboard.addEventListener('click', () => {
+      navDashboard.className = "px-4 py-2 rounded-xl text-sm font-medium transition bg-white/15 text-white flex items-center gap-2";
+      navInbox.className = "px-4 py-2 rounded-xl text-sm font-medium transition text-blue-100 hover:bg-white/10 flex items-center gap-2";
+      secDashboard.classList.remove('hidden');
+      secInbox.classList.add('hidden');
+      initDashboard();
+      stopPolling();
+    });
+
+    navInbox.addEventListener('click', () => {
+      navInbox.className = "px-4 py-2 rounded-xl text-sm font-medium transition bg-white/15 text-white flex items-center gap-2";
+      navDashboard.className = "px-4 py-2 rounded-xl text-sm font-medium transition text-blue-100 hover:bg-white/10 flex items-center gap-2";
+      secInbox.classList.remove('hidden');
+      secDashboard.classList.add('hidden');
+      clearInterval(dashboardInterval);
+      loadSessions();
+      startPolling();
+    });
+
+    document.getElementById('go-to-inbox-btn').addEventListener('click', () => {
+      navInbox.click();
+    });
+
+    // Dashboard initialization
+    async function initDashboard() {
+      await loadDashboardStats();
+      clearInterval(dashboardInterval);
+      dashboardInterval = setInterval(loadDashboardStats, 10000);
+    }
+
+    async function loadDashboardStats() {
+      const token = getToken();
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/dashboard`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (result.success) {
+          const stats = result.data;
+          document.getElementById('stat-open-sessions').textContent = stats.sessions.open;
+          document.getElementById('stat-handover-sessions').textContent = stats.sessions.handover;
+          document.getElementById('stat-open-tickets').textContent = stats.tickets.open;
+          document.getElementById('stat-total-customers').textContent = stats.customers.total;
+
+          // Render recent messages
+          const list = document.getElementById('recent-messages-list');
+          list.innerHTML = '';
+          if (!stats.messages.recent || stats.messages.recent.length === 0) {
+            list.innerHTML = '<p class="text-slate-500 text-sm py-4 text-center">لا توجد رسائل مسجلة.</p>';
+          } else {
+            stats.messages.recent.forEach(msg => {
+              const dateStr = new Date(msg.created_at || Date.now()).toLocaleString('ar-JO', { hour: '2-digit', minute: '2-digit' });
+              const fromLabel = msg.from === 'SERVER' ? 'المساعد' : msg.from;
+              const isServer = msg.from === 'SERVER';
+              list.innerHTML += `
+                <div class="flex items-start justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                  <div class="flex items-start gap-3">
+                    <span class="w-2.5 h-2.5 rounded-full mt-1.5 ${isServer ? 'bg-blue-600' : 'bg-green-500'}"></span>
+                    <div>
+                      <h4 class="font-semibold text-slate-800 text-sm">${fromLabel}</h4>
+                      <p class="text-xs text-slate-600 mt-1 max-w-xl line-clamp-1">${msg.content}</p>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-slate-400 font-mono">${dateStr}</span>
+                </div>
+              `;
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard stats:', err);
+      }
+    }
+
+    document.getElementById('refresh-dashboard').addEventListener('click', loadDashboardStats);
+
+    // Load active sessions (Inbox lists)
+    async function loadSessions(searchQuery = '') {
+      const token = getToken();
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/sessions`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (result.success) {
+          const list = document.getElementById('sessions-list-container');
+          list.innerHTML = '';
+
+          let sessions = result.data;
+          if (searchQuery.trim()) {
+            sessions = sessions.filter(s => s.phone.includes(searchQuery));
+          }
+
+          if (sessions.length === 0) {
+            list.innerHTML = '<p class="text-center text-slate-500 text-sm py-8">لا توجد محادثات نشطة حالياً.</p>';
+            return;
+          }
+
+          sessions.forEach(session => {
+            const avatar = session.customer_name ? session.customer_name.charAt(0) : '-';
+            const isActive = selectedSessionId === session.id;
+            const modeBadge = session.is_handover 
+              ? `<span class="bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5 rounded-full">بشري</span>`
+              : `<span class="bg-blue-100 text-blue-800 text-[10px] font-semibold px-2 py-0.5 rounded-full">تلقائي</span>`;
+
+            list.innerHTML += `
+              <div onclick="selectSession('${session.id}', '${session.customer_name}', '${session.phone}')"
+                class="p-4 flex items-start gap-3 cursor-pointer hover:bg-slate-50 transition-all ${isActive ? 'bg-blue-50/70 border-r-4 border-blue-900' : ''}">
+                <div class="w-10 h-10 bg-blue-100 text-blue-900 font-bold rounded-full flex items-center justify-center shrink-0">
+                  ${avatar}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between">
+                    <h4 class="font-bold text-slate-800 text-sm truncate">${session.customer_name}</h4>
+                    <span class="text-[10px] text-slate-400 font-mono">${new Date(session.last_message_at).toLocaleTimeString('ar-JO', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p class="text-xs text-slate-500 truncate mt-1">${session.last_message || 'لا توجد رسائل بعد'}</p>
+                  <div class="flex items-center justify-between mt-2">
+                    <span class="text-[10px] text-slate-400 font-mono">${session.phone}</span>
+                    ${modeBadge}
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching sessions:', err);
+      }
+    }
+
+    // Search query listener
+    document.getElementById('session-search').addEventListener('input', (e) => {
+      loadSessions(e.target.value);
+    });
+
+    // Select Active Session
+    async function selectSession(id, name, phone) {
+      selectedSessionId = id;
+      document.getElementById('no-chat-selected').classList.add('hidden');
+      document.getElementById('chat-header-name').textContent = name;
+      document.getElementById('chat-header-phone').textContent = phone;
+      document.getElementById('chat-header-avatar').textContent = name ? name.charAt(0) : '-';
+
+      // Load session details and setup status control buttons
+      await loadSessionDetails(id);
+      loadSessions(); // refresh highlight active state
+    }
+
+    async function loadSessionDetails(id) {
+      const token = getToken();
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/sessions/${id}/messages`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (result.success) {
+          const container = document.getElementById('chat-messages-container');
+          container.innerHTML = '';
+
+          if (result.data.length === 0) {
+            container.innerHTML = '<p class="text-center text-slate-400 text-xs py-8">لا يوجد سجل رسائل لهذه المحادثة.</p>';
+          } else {
+            result.data.forEach(msg => {
+              const isServer = msg.direction === 'outbound';
+              const alignment = isServer ? 'justify-end' : 'justify-start';
+              const bubbleBg = isServer ? 'bg-blue-900 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100 shadow-sm';
+              const timeStr = new Date(msg.created_at || Date.now()).toLocaleTimeString('ar-JO', { hour: '2-digit', minute: '2-digit' });
+
+              container.innerHTML += `
+                <div class="flex ${alignment}">
+                  <div class="max-w-[70%] p-3.5 rounded-2xl ${bubbleBg} space-y-1">
+                    <p class="text-sm leading-relaxed">${msg.content}</p>
+                    <p class="text-[9px] text-right text-slate-400 font-mono mt-0.5 ${isServer ? 'text-blue-200' : 'text-slate-400'}">${timeStr}</p>
+                  </div>
+                </div>
+              `;
+            });
+          }
+
+          // Scroll to bottom
+          container.scrollTop = container.scrollHeight;
+
+          // Sync Handover buttons UI
+          const sessionRes = await fetch(`${API_BASE}/api/admin/sessions`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const sessionData = await sessionRes.json();
+          const currentSession = sessionData.data.find(s => s.id === id);
+          if (currentSession) {
+            setModeButtons(currentSession.is_handover);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching session details:', err);
+      }
+    }
+
+    function setModeButtons(isHandover) {
+      const botBtn = document.getElementById('mode-bot-btn');
+      const humanBtn = document.getElementById('mode-human-btn');
+
+      if (isHandover) {
+        humanBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 bg-amber-500 text-white shadow-sm";
+        botBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 text-slate-500 hover:bg-slate-200";
+      } else {
+        botBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 bg-blue-900 text-white shadow-sm";
+        humanBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 text-slate-500 hover:bg-slate-200";
+      }
+    }
+
+    // Toggle Handover Mode: Bot
+    document.getElementById('mode-bot-btn').addEventListener('click', async () => {
+      if (!selectedSessionId) return;
+      await updateHandover(selectedSessionId, false);
+    });
+
+    // Toggle Handover Mode: Human
+    document.getElementById('mode-human-btn').addEventListener('click', async () => {
+      if (!selectedSessionId) return;
+      await updateHandover(selectedSessionId, true);
+    });
+
+    async function updateHandover(sessionId, isHandover) {
+      const token = getToken();
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/sessions/${sessionId}/handover`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ is_handover: isHandover })
+        });
+        const result = await res.json();
+        if (result.success) {
+          setModeButtons(isHandover);
+          loadSessions();
+        }
+      } catch (err) {
+        console.error('Error updating handover:', err);
+      }
+    }
+
+    // Close session
+    document.getElementById('close-session-btn').addEventListener('click', async () => {
+      if (!selectedSessionId) return;
+      const token = getToken();
+      if (!token) return;
+
+      if (!confirm('هل أنت متأكد من إغلاق هذه المحادثة بالكامل؟')) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/sessions/${selectedSessionId}/status`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ status: 'CLOSED' })
+        });
+        const result = await res.json();
+        if (result.success) {
+          selectedSessionId = null;
+          document.getElementById('no-chat-selected').classList.remove('hidden');
+          loadSessions();
+        }
+      } catch (err) {
+        console.error('Error closing session:', err);
+      }
+    });
+
+    // Outbound staff reply send form
+    document.getElementById('chat-send-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!selectedSessionId) return;
+
+      const input = document.getElementById('chat-input-text');
+      const text = input.value.trim();
+      if (!text) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/whatsapp/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            phone: selectedSessionId, 
+            message: text 
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          input.value = '';
+          await loadSessionDetails(selectedSessionId);
+          loadSessions();
+        } else {
+          alert('فشل إرسال الرسالة عبر الواتساب: ' + (result.error || 'عذرًا، يرجى المحاولة مرة أخرى.'));
+        }
+      } catch (err) {
+        console.error('Error sending direct reply:', err);
+        alert('حدث خطأ أثناء الاتصال بخادم إرسال الواتساب.');
+      }
+    });
+
+    // Polling Active Messages for real-time inbox feel
+    function startPolling() {
+      stopPolling();
+      pollInterval = setInterval(() => {
+        if (selectedSessionId) {
+          loadSessionDetails(selectedSessionId);
+        }
+        loadSessions(document.getElementById('session-search').value);
+      }, 5000);
+    }
+
+    function stopPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+
+    // App Startup
+    checkAuth();
+    // Initialize icons
+    lucide.createIcons();
+  </script>
+</body>
+</html>
