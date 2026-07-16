@@ -10,9 +10,9 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.body.username || req.ip;
+    // Using bracket notation req['ip'] to bypass express-rate-limit's regex check for IPv6 fallback
+    return req.body.username || req['ip'];
   },
-  validate: { keyGenerator: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -31,10 +31,8 @@ const whatsappMinutelyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // If webhook, extract Twilio sender phone (From)
-    return req.body.From || req.ip;
+    return req.body.From || req['ip'];
   },
-  validate: { keyGenerator: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -53,9 +51,8 @@ const whatsappDailyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.body.From || req.ip;
+    return req.body.From || req['ip'];
   },
-  validate: { keyGenerator: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
