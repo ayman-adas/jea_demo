@@ -12,6 +12,7 @@ const authLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.body.username || req.ip;
   },
+  validate: { keyGenerator: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -33,6 +34,7 @@ const whatsappMinutelyLimiter = rateLimit({
     // If webhook, extract Twilio sender phone (From)
     return req.body.From || req.ip;
   },
+  validate: { keyGenerator: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -53,6 +55,7 @@ const whatsappDailyLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.body.From || req.ip;
   },
+  validate: { keyGenerator: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
