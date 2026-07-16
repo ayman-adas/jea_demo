@@ -964,47 +964,21 @@ exports.receiveWebhook = async (req, res, next) => {
         res.type('text/xml');
         return res.send(twiml.toString());
       } else {
-        // Case 2 & 3: Low confidence (< 20%)
-        // Check if query contains any problem or complaint keywords to offer ticket creation
-        const problemKeywords = [
-          'مشكلة', 'مشكله', 'عطل', 'خلل', 'شكوى', 'شكوي', 'خطأ', 'خطا',
-          'لا يعمل', 'مش زابط', 'خراب', 'مستعجل', 'تكت', 'تذكره', 'تذكرة',
-          'error', 'problem', 'issue', 'bug', 'complaint', 'failed', 'not working', 'fail'
-        ];
+        // Case 2: Low confidence (< 20%) -> Always ask if they want to open a ticket
+        const scorePercentage = Math.round(qaResult.score * 100);
+        const replyText = getTranslation(userLang, 'cantAnswerMsg', { score: scorePercentage });
 
-        const hasProblem = problemKeywords.some(kw => incomingBody.toLowerCase().includes(kw));
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_TICKET_CONFIRM',
+          originalQuestion: incomingBody,
+          score: qaResult.score,
+          lang: userLang
+        });
 
-        if (hasProblem) {
-          // Case 2: It is a problem -> Ask if they want to open a ticket
-          const scorePercentage = Math.round(qaResult.score * 100);
-          const replyText = getTranslation(userLang, 'cantAnswerMsg', { score: scorePercentage });
-
-          sessionStates.set(cleanPhone, {
-            step: 'AWAITING_TICKET_CONFIRM',
-            originalQuestion: incomingBody,
-            score: qaResult.score,
-            lang: userLang
-          });
-
-          await recordMessage(session.session_id, replyText, 'SERVER', 'TEXT');
-          twiml.message(replyText);
-          res.type('text/xml');
-          return res.send(twiml.toString());
-        } else {
-          // Case 3: Simple question/topic not understood -> Give them the categories/options list
-          const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
-          sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
-
-          const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}`).join('\n');
-          const responseText = userLang === 'ar'
-            ? `عذراً، لم أفهم استفسارك تماماً. يرجى اختيار أحد الأقسام التالية لمساعدتك:\n\n${categoryList}`
-            : `Sorry, I couldn't understand your query. Please select one of the following categories to assist you:\n\n${categoryList}`;
-
-          await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
-          twiml.message(responseText);
-          res.type('text/xml');
-          return res.send(twiml.toString());
-        }
+        await recordMessage(session.session_id, replyText, 'SERVER', 'TEXT');
+        twiml.message(replyText);
+        res.type('text/xml');
+        return res.send(twiml.toString());
       }
     } catch (qaErr) {
       console.error('QA Engine search failed, using default support info:', qaErr.message);
