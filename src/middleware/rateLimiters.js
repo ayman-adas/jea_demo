@@ -11,11 +11,11 @@ const sendRateLimitTwiML = (res, message) => {
 
 /**
  * Brute force protection for admin login & OTP endpoints
- * Max 5 login attempts per 15 minutes per IP/username
+ * Max 100 login attempts per 15 minutes in development/demo
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
