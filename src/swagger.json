@@ -15,7 +15,7 @@
     "/api/admin/auth/login": {
       "post": {
         "summary": "Admin Login",
-        "description": "Authenticate an administrator or agent and return a JWT token.",
+        "description": "Authenticate an administrator or agent, handles optional OTP verification, and returns a JWT token.",
         "requestBody": {
           "required": true,
           "content": {
@@ -24,7 +24,8 @@
                 "type": "object",
                 "properties": {
                   "username": { "type": "string", "example": "admin" },
-                  "password": { "type": "string", "example": "admin123" }
+                  "password": { "type": "string", "example": "admin123" },
+                  "otp": { "type": "string", "example": "123456", "description": "Optional OTP required on second step." }
                 },
                 "required": ["username", "password"]
               }
@@ -33,13 +34,15 @@
         },
         "responses": {
           "200": {
-            "description": "Login Successful",
+            "description": "Login Successful or OTP Step Requested",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
+                    "requireOtp": { "type": "boolean", "example": true, "description": "True if credentials are correct but OTP is still needed." },
+                    "message": { "type": "string", "example": "OTP Verification Required." },
                     "data": {
                       "type": "object",
                       "properties": {

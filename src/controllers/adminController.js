@@ -10,18 +10,26 @@ const { Op } = require('sequelize');
  */
 exports.login = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, otp } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', message: 'username and password are required.' });
     }
 
-    // Check against env-configured admin credentials
+    // Check credentials first
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    let targetUser = null;
 
-    if (username !== adminUsername || password !== adminPassword) {
-      // Also allow login by user_id match with password check
+    if (username === adminUsername && password === adminPassword) {
+      targetUser = {
+        user_id: 'admin',
+        name: adminUsername,
+        user_type: 'ADMIN',
+        status: 'ACTIVE'
+      };
+    } else {
+      // Check database users
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -37,35 +45,39 @@ exports.login = async (req, res, next) => {
         return res.status(401).json({ success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid username or password.' });
       }
 
-      const token = generateToken(user);
+      targetUser = {
+        user_id: user.user_id,
+        name: user.name,
+        user_type: user.user_type,
+        status: user.status
+      };
+    }
+
+    // If credentials are valid, check OTP
+    const requiredOtp = process.env.ADMIN_OTP || '123456';
+    if (!otp) {
       return res.json({
         success: true,
-        data: {
-          token,
-          user: {
-            user_id: user.user_id,
-            name: user.name,
-            user_type: user.user_type,
-            status: user.status
-          }
-        }
+        requireOtp: true,
+        message: 'OTP Verification Required.'
       });
     }
 
-    // Env-level admin — create a virtual admin user
-    const adminUser = {
-      user_id: 'admin',
-      name: adminUsername,
-      user_type: 'ADMIN',
-      status: 'ACTIVE'
-    };
+    if (otp !== requiredOtp) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_OTP',
+        message: 'رمز التحقق OTP غير صحيح.'
+      });
+    }
 
-    const token = generateToken(adminUser);
+    // Credentials and OTP are both valid -> generate session token
+    const token = generateToken(targetUser);
     return res.json({
       success: true,
       data: {
         token,
-        user: adminUser
+        user: targetUser
       }
     });
   } catch (err) {
