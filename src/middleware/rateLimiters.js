@@ -44,10 +44,11 @@ const whatsappMinutelyLimiter = rateLimit({
   },
   skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
   handler: (req, res) => {
-    sendRateLimitTwiML(
-      res,
-      '⚠️ لقد تجاوزت الحد المسموح به من الرسائل في الدقيقة الواحدة. يرجى الانتظار قليلاً قبل المحاولة مجدداً.'
-    );
+    // Bilingual response for direct localization support
+    const bilingualMessage = 
+      '⚠️ لقد تجاوزت الحد المسموح به من الرسائل في الدقيقة الواحدة. يرجى الانتظار قليلاً قبل المحاولة مجدداً.\n\n' +
+      '⚠️ You have exceeded the allowed message rate per minute. Please wait a moment and try again.';
+    sendRateLimitTwiML(res, bilingualMessage);
   }
 });
 
@@ -64,10 +65,11 @@ const whatsappDailyLimiter = rateLimit({
   },
   skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
   handler: (req, res) => {
-    sendRateLimitTwiML(
-      res,
-      '⚠️ لقد تجاوزت الحد الأقصى المسموح به من الرسائل لهذا اليوم. يرجى المحاولة غداً.'
-    );
+    // Bilingual response for direct localization support
+    const bilingualMessage = 
+      '⚠️ لقد تجاوزت الحد الأقصى المسموح به من الرسائل لهذا اليوم. يرجى المحاولة غداً.\n\n' +
+      '⚠️ You have exceeded the daily message limit. Please try again tomorrow.';
+    sendRateLimitTwiML(res, bilingualMessage);
   }
 });
 
