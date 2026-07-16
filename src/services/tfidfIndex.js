@@ -31,10 +31,10 @@ const ARABIC_STOP_WORDS = new Set([
  * Normalize and tokenize text for both Arabic and English.
  * Removes diacritics, punctuation, and stop words.
  * @param {string} text
- * @returns {string} cleaned text
+ * @returns {string[]} array of token strings
  */
 function normalize(text) {
-  if (!text) return '';
+  if (!text) return [];
 
   let t = text
     // Remove Arabic diacritics (tashkeel)
@@ -53,7 +53,7 @@ function normalize(text) {
 
   // Remove stop words
   const tokens = t.split(' ').filter(w => w.length > 1 && !ARABIC_STOP_WORDS.has(w));
-  return tokens.join(' ');
+  return tokens;
 }
 
 /**

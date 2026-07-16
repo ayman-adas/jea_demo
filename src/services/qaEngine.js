@@ -8,8 +8,8 @@
 
 const tfidfIndex = require('./tfidfIndex');
 
-// Cosine similarity threshold (50% confidence)
-const CONFIDENCE_THRESHOLD = 0.50;
+// Cosine similarity threshold (20% confidence)
+const CONFIDENCE_THRESHOLD = 0.20;
 
 /**
  * Initialize the Q&A Engine (indexes files)
