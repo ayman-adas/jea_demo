@@ -1,4 +1,13 @@
+const twilio = require('twilio');
 const rateLimit = require('express-rate-limit');
+
+// Helper to return a TwiML XML message directly to the user's WhatsApp on rate limit
+const sendRateLimitTwiML = (res, message) => {
+  const twiml = new twilio.twiml.MessagingResponse();
+  twiml.message(message);
+  res.type('text/xml');
+  return res.status(200).send(twiml.toString());
+};
 
 /**
  * Brute force protection for admin login & OTP endpoints
@@ -35,11 +44,10 @@ const whatsappMinutelyLimiter = rateLimit({
   },
   skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
   handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      code: 'LIMIT_EXCEEDED',
-      message: 'لقد تجاوزت الحد المسموح به من الرسائل في الدقيقة الواحدة.'
-    });
+    sendRateLimitTwiML(
+      res,
+      '⚠️ لقد تجاوزت الحد المسموح به من الرسائل في الدقيقة الواحدة. يرجى الانتظار قليلاً قبل المحاولة مجدداً.'
+    );
   }
 });
 
@@ -56,11 +64,10 @@ const whatsappDailyLimiter = rateLimit({
   },
   skip: (req) => req.body && (req.body.SmsStatus || req.body.MessageStatus),
   handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      code: 'LIMIT_EXCEEDED',
-      message: 'لقد تجاوزت الحد المسموح به من الرسائل لهذا اليوم.'
-    });
+    sendRateLimitTwiML(
+      res,
+      '⚠️ لقد تجاوزت الحد الأقصى المسموح به من الرسائل لهذا اليوم. يرجى المحاولة غداً.'
+    );
   }
 });
 
