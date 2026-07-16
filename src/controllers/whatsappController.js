@@ -304,7 +304,7 @@ exports.sendWhatsApp = async (req, res, next) => {
  */
 exports.receiveWebhook = async (req, res, next) => {
   try {
-    const { From, Body, MessageSid } = req.body;
+    const { From, Body, MessageSid, ProfileName } = req.body;
 
     if (!From) {
       const err = new Error('Invalid Twilio payload. "From" is required.');
@@ -359,6 +359,11 @@ exports.receiveWebhook = async (req, res, next) => {
     } else if (state?.lang) {
       userLang = state.lang;
     }
+
+    // Resolve display name: WhatsApp profile name → DB name → generic fallback
+    const whatsappName = ProfileName ? ProfileName.trim() : null;
+    const dbName = customer?.user?.name && customer.user.name !== 'John Doe' ? customer.user.name.trim() : null;
+    const displayName = whatsappName || dbName || (userLang === 'ar' ? 'حضرة المهندس' : 'there');
 
     if (!customer) {
       const reply = getTranslation(userLang, 'contactSupport');
@@ -500,13 +505,16 @@ exports.receiveWebhook = async (req, res, next) => {
       return res.send(twiml.toString());
     }
 
-    // Default conversational menu keywords
-    const resetKeywords = ['hello', 'hi', 'start', 'restart', 'menu', 'مرحبا'];
-    if (resetKeywords.includes(normalizedBody)) {
+    // Default conversational menu keywords (English & Arabic greetings)
+    const resetKeywords = [
+      'hello', 'hi', 'hey', 'start', 'restart', 'menu',
+      'مرحبا', 'مرحباً', 'السلام عليكم', 'سلام', 'هلا', 'أهلا', 'اهلا', 'اهلاً', 'أهلاً'
+    ];
+    if (resetKeywords.some(kw => normalizedBody === kw.toLowerCase() || incomingBody.trim() === kw)) {
       const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
 
       if (categories.length === 0) {
-        const reply = getTranslation(userLang, 'welcomeNoCategories', { name: customer.user.name });
+        const reply = getTranslation(userLang, 'welcomeNoCategories', { name: displayName });
         twiml.message(reply);
         res.type('text/xml');
         return res.send(twiml.toString());
@@ -541,7 +549,7 @@ exports.receiveWebhook = async (req, res, next) => {
 
       // Plain text fallback
       const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}`).join('\n');
-      const responseText = getTranslation(userLang, 'welcomePrompt', { name: customer.user.name, list: categoryList });
+      const responseText = getTranslation(userLang, 'welcomePrompt', { name: displayName, list: categoryList });
 
       await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
 

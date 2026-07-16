@@ -1,8 +1,8 @@
 const translations = {
   en: {
     contactSupport: "Please contact customer support.",
-    welcomeNoCategories: "Welcome back, {name}! No service categories are currently active.",
-    welcomePrompt: "Welcome back, {name}!\n\nPlease select a service category by replying with its number:\n{list}",
+    welcomeNoCategories: "Hello, {name}! 👋 No service categories are currently active. Please try again later.",
+    welcomePrompt: "Hello, {name}! 👋 Welcome to the Jordan Engineers Association Digital Assistant.\n\nPlease select a service category by replying with its number:\n{list}",
     invalidSelectionCategory: "Invalid selection. Please choose a category by entering its number or name.",
     noServicesAvailable: "There are no services available for your role under \"{category}\". Reply \"hello\" to return to the menu.",
     selectServicePrompt: "You selected \"{category}\".\n\nPlease select a service by entering its number:\n{list}",
@@ -22,8 +22,8 @@ const translations = {
   },
   ar: {
     contactSupport: "يرجى التواصل مع خدمة العملاء.",
-    welcomeNoCategories: "مرحباً بك يا {name}! لا توجد أقسام خدمة مفعلة حالياً.",
-    welcomePrompt: "مرحباً بك يا {name}!\n\nيرجى اختيار القسم بإرسال رقمه:\n{list}",
+    welcomeNoCategories: "وعليكم السلام ورحمة الله وبركاته، {name}! 👋 لا توجد أقسام خدمة مفعلة حالياً. يرجى المحاولة لاحقاً.",
+    welcomePrompt: "وعليكم السلام ورحمة الله وبركاته، {name}! 👋 أهلاً بك في المساعد الرقمي لنقابة المهندسين الأردنيين.\n\nيرجى اختيار القسم بإرسال رقمه:\n{list}",
     invalidSelectionCategory: "اختيار غير صحيح. يرجى اختيار القسم بإرسال رقمه أو اسمه.",
     noServicesAvailable: "لا توجد خدمات متاحة لصلاحياتك حالياً تحت قسم \"{category}\". أرسل \"مرحبا\" للعودة إلى القائمة الرئيسية.",
     selectServicePrompt: "لقد اخترت \"{category}\".\n\nيرجى اختيار الخدمة بإرسال رقمها:\n{list}",
@@ -32,7 +32,7 @@ const translations = {
     requestSuccess: "✅ تم تسجيل طلبك بنجاح!\n\nرقم التذكرة الخاص بك هو: {ticketId}.\n\nأرسل \"مرحبا\" في أي وقت للعودة إلى القائمة الرئيسية.",
     requestFailed: "❌ فشل تسجيل الطلب!\n\nيبدو أنك لم تقم بتعبئة القالب بشكل صحيح. يرجى التأكد من الحفاظ على التنسيق مثل [اسم الحقل: القيمة] والمحاولة مرة أخرى.",
     corruptState: "حدث خطأ ما. دعنا نبدأ من جديد. أرسل \"مرحبا\".",
-    supportWelcome: "مرحباً! يرجى اختيار القسم المناسب للتواصل مع خدمة العملاء:\n{list}",
+    supportWelcome: "وعليكم السلام! يرجى اختيار القسم المناسب للتواصل مع خدمة العملاء:\n{list}",
     supportInvalid: "اختيار غير صحيح. يرجى اختيار القسم بإدخال الرقم المناسب له.",
     supportHandoverConfirm: "سيقوم موظف خدمة العملاء بخدمتك قريباً. شكراً لك!",
     handoverFallback: "سنقوم بتحويلك لموظف خدمة العملاء. يرجى اختيار القسم المناسب للتوجيه:\n{list}",
