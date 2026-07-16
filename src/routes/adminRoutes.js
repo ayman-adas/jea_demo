@@ -3,9 +3,12 @@ const router = express.Router();
 const adminCtrl = require('../controllers/adminController');
 const { authenticate, requireAdmin } = require('../middleware/authMiddleware');
 
+const { authLimiter } = require('../middleware/rateLimiters');
+const { validateLogin, validateOtp } = require('../middleware/validationMiddleware');
+
 // ── Auth (no auth required) ───────────────────────────────────────────────
-router.post('/auth/login', adminCtrl.login);
-router.post('/auth/verify-otp', adminCtrl.verifyOtp);
+router.post('/auth/login', authLimiter, validateLogin, adminCtrl.login);
+router.post('/auth/verify-otp', authLimiter, validateOtp, adminCtrl.verifyOtp);
 
 // ── Protected admin routes ────────────────────────────────────────────────
 router.use(authenticate);

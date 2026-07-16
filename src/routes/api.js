@@ -32,8 +32,17 @@ router.get('/', apiController.getApiIndex);
 router.get('/status', apiController.getStatus);
 router.get('/health', apiController.getHealth);
 
+const { whatsappMinutelyLimiter, whatsappDailyLimiter } = require('../middleware/rateLimiters');
+const { validateWhatsappWebhook } = require('../middleware/validationMiddleware');
+
 // Twilio WhatsApp routes
 router.post('/whatsapp/send', upload.any(), whatsappController.sendWhatsApp);
-router.post('/whatsapp/webhook', whatsappController.receiveWebhook);
+router.post(
+  '/whatsapp/webhook',
+  whatsappMinutelyLimiter,
+  whatsappDailyLimiter,
+  validateWhatsappWebhook,
+  whatsappController.receiveWebhook
+);
 
 module.exports = router;

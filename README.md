@@ -111,3 +111,25 @@ The backend isolates credentials checking from token creation for maximum securi
    - **Path:** `POST /api/admin/auth/verify-otp`
    - **Body:** `{ "username": "admin", "otp": "123456" }`
    - **Response:** Returns JWT token and User session profiles.
+
+---
+
+## 🛡️ Security & API Hardening
+
+The platform implements robust, industry-standard security practices to protect all backend endpoints:
+
+### 1. Multi-Level Rate Limiting
+- **Brute Force Protection (`authLimiter`):** Restricts the login and verify-otp endpoints to a maximum of **5 attempts per 15 minutes** per IP/username.
+- **WhatsApp Webhook Safeguards:**
+  - **Minutely Limiter:** Restricts users to a maximum of **10 messages per minute** per WhatsApp sender number.
+  - **Daily Limiter:** Restricts users to a maximum of **200 messages per 24 hours** per WhatsApp sender number to prevent billing spikes and spam.
+
+### 2. Input Validation (Joi)
+All incoming client inputs are strictly validated before execution:
+- Admin credential parameters are validated to enforce minimum lengths.
+- OTP values are validated to ensure they are exactly **6 digits** and numeric-only.
+- WhatsApp Webhook payloads verify existence of the Twilio `From` sender address and the text message `Body`.
+
+### 3. Secure HTTP Headers (Helmet)
+Express endpoints use the **Helmet** middleware to apply secure headers, defending the server against vulnerabilities such as Cross-Site Scripting (XSS), clickjacking, and mime-type sniffing, while maintaining Content Security Policies (CSP) configured to support external Tailwind CSS & Lucide Icons assets.
+

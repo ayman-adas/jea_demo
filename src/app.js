@@ -7,9 +7,25 @@ const errorHandler = require('./middleware/errorHandler');
 const logMiddleware = require('./middleware/logMiddleware');
 const langMiddleware = require('./middleware/langMiddleware');
 
+const helmet = require('helmet');
 const path = require('node:path');
 
 const app = express();
+
+// Secure HTTP Headers (Helmet) with permissive CSP for Tailwind / Lucide CDNs
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https://*", "http://*"],
+      connectSrc: ["'self'", "http://localhost:3000", "ws://localhost:3000", "http://127.0.0.1:3000"]
+    }
+  }
+}));
+
 
 // CORS — allow the React admin panel (port 5173) to reach the API
 app.use((req, res, next) => {
