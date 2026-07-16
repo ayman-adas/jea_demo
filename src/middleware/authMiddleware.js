@@ -23,6 +23,10 @@ const generateToken = (user) => {
  * Middleware: Verify Bearer JWT token
  */
 const authenticate = (req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Missing or invalid authorization header.' });
