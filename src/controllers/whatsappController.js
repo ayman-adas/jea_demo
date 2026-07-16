@@ -715,21 +715,32 @@ exports.receiveWebhook = async (req, res, next) => {
           const http = require('node:http');
 
           const apiResponse = await new Promise((resolve, reject) => {
-            http.get(apiUrl, {
+            const req = http.get(apiUrl, {
               headers: {
                 'Authorization': `Bearer ${process.env.JEA_HEALTH_API_TOKEN || 'F2D544A52558B6BAC62C313FCCE48'}`
               }
-            }, (res) => {
+            }, (apiRes) => {
               let data = '';
-              res.on('data', chunk => { data += chunk; });
-              res.on('end', () => {
+              apiRes.on('data', chunk => { data += chunk; });
+              apiRes.on('end', () => {
                 try {
-                  resolve({ status: res.statusCode, body: JSON.parse(data) });
+                  resolve({ status: apiRes.statusCode, body: JSON.parse(data) });
                 } catch {
-                  resolve({ status: res.statusCode, body: data });
+                  resolve({ status: apiRes.statusCode, body: data });
                 }
               });
-            }).on('error', reject);
+            });
+
+            req.on('error', (err) => {
+              console.error(`[JEA API] Connection error fetching cards for key ${engKey}:`, err.message);
+              reject(err);
+            });
+
+            // Configure request timeout (8 seconds) to prevent hanging Twilio callback
+            req.setTimeout(8000, () => {
+              console.warn(`[JEA API] Request timed out after 8000ms for key ${engKey}`);
+              req.destroy(new Error('Outsource API connection timed out'));
+            });
           });
 
           if (apiResponse.status === 200 && apiResponse.body?.Table?.length > 0) {
