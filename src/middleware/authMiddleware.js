@@ -2,8 +2,8 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jea-demo-secret-key-change-in-production';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || (JWT_SECRET + '-refresh-token-secret-key-2026');
-const JWT_ACCESS_EXPIRES_IN = '1h'; // 1 hour access token
-const JWT_REFRESH_EXPIRES_IN = '7d'; // 7 days refresh token
+const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '1h'; // 1 hour access token
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d'; // 30 days (1 month) refresh token
 
 /**
  * Generate a JWT access token for a user
