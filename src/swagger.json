@@ -3864,8 +3864,16 @@
   }
 },
 "components": {
-    "schemas": {
-      "ErrorResponse": {
+  "securitySchemes": {
+    "bearerAuth": {
+      "type": "http",
+      "scheme": "bearer",
+      "bearerFormat": "JWT",
+      "description": "Enter your JWT Access Token directly to authenticate requests."
+    }
+  },
+  "schemas": {
+    "ErrorResponse": {
         "type": "object",
         "properties": {
           "error": {
