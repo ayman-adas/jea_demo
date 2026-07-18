@@ -433,3 +433,161 @@ exports.setSessionStatus = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * GET /api/admin/tickets
+ * Returns a paginated list of support tickets.
+ * If the user role is not ADMIN, it filters and returns only tickets assigned to the logged-in employee/agent.
+ */
+exports.getAdminTickets = async (req, res, next) => {
+  try {
+    const { user_id, user_type } = req.user;
+    const { status, limit = 50, offset = 0 } = req.query;
+
+    const where = {};
+    
+    // If not ADMIN, filter by assigned employee ID
+    if (user_type !== 'ADMIN') {
+      where.emp_assigned = user_id;
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    const { count, rows } = await Ticket.findAndCountAll({
+      where,
+      limit: Number.parseInt(limit, 10),
+      offset: Number.parseInt(offset, 10),
+      order: [['created_at', 'DESC']],
+      include: [
+        { model: Customer, as: 'customer', attributes: ['phone', 'role', 'gender'] }
+      ]
+    });
+
+    return res.json({
+      success: true,
+      total: count,
+      limit: Number.parseInt(limit, 10),
+      offset: Number.parseInt(offset, 10),
+      data: rows
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * PATCH /api/admin/tickets/:ticketId
+ * Updates status, priority, or assignment for a ticket.
+ * If user is not ADMIN, they can only update a ticket assigned to them, and cannot assign it to someone else.
+ */
+exports.updateAdminTicket = async (req, res, next) => {
+  try {
+    const { user_id, user_type } = req.user;
+    const { ticketId } = req.params;
+    const { status, ticket_priority, emp_assigned } = req.body;
+
+    const ticket = await Ticket.findByPk(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ success: false, code: 'TICKET_NOT_FOUND', message: 'Ticket not found.' });
+    }
+
+    // Permission check: Employees/Agents can only update tickets assigned to them
+    if (user_type !== 'ADMIN' && ticket.emp_assigned !== user_id) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'You can only manage tickets assigned to you.' });
+    }
+
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (ticket_priority) updateData.ticket_priority = ticket_priority;
+    
+    // Only Admin can assign/reassign tickets
+    if (emp_assigned) {
+      if (user_type === 'ADMIN') {
+        updateData.emp_assigned = emp_assigned;
+      } else {
+        return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Only administrators can assign tickets.' });
+      }
+    }
+
+    await ticket.update(updateData);
+
+    return res.json({
+      success: true,
+      message: 'Ticket updated successfully.',
+      data: ticket
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/admin/sessions/:sessionId/reply
+ * Sends a WhatsApp message from the human agent to the customer,
+ * and records it in the Messages table.
+ */
+exports.sendHandoverReply = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', message: 'message is required.' });
+    }
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, code: 'SESSION_NOT_FOUND', message: 'Session not found.' });
+    }
+
+    if (!session.is_handover) {
+      return res.status(409).json({ success: false, code: 'NOT_IN_HANDOVER', message: 'Session is not in handover mode. Enable handover first.' });
+    }
+
+    const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+    const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+
+    if (!twilioAccountSid || !twilioAuthToken || twilioAccountSid.startsWith('ACXXXX')) {
+      return res.status(503).json({ success: false, code: 'TWILIO_NOT_CONFIGURED', message: 'Twilio credentials not configured.' });
+    }
+
+    const twilio = require('twilio');
+    const client = twilio(twilioAccountSid, twilioAuthToken);
+
+    const toWhatsApp = `whatsapp:${sessionId.startsWith('+') ? sessionId : '+' + sessionId}`;
+    const msgResult = await client.messages.create({
+      from: twilioWhatsAppNumber,
+      to: toWhatsApp,
+      body: message.trim()
+    });
+
+    // Record the agent reply in Messages table
+    const crypto = require('node:crypto');
+    const { Message } = require('../models');
+    const timestampStr = new Date().toISOString();
+    await Message.create({
+      message_id: 'msg_' + crypto.randomUUID(),
+      session_id: sessionId,
+      content: message.trim(),
+      from: 'SERVER',
+      message_type: 'TEXT',
+      status: 'SENT',
+      created_at: timestampStr,
+      updated_at: timestampStr
+    });
+
+    return res.json({
+      success: true,
+      message: 'Reply sent successfully via WhatsApp.',
+      messageSid: msgResult.sid,
+      to: toWhatsApp,
+      body: message.trim()
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

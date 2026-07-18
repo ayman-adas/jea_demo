@@ -22,5 +22,10 @@ router.get('/sessions', adminCtrl.getAdminSessions);
 router.get('/sessions/:sessionId/messages', adminCtrl.getSessionMessages);
 router.patch('/sessions/:sessionId/handover', adminCtrl.setHandover);
 router.patch('/sessions/:sessionId/status', adminCtrl.setSessionStatus);
+router.post('/sessions/:sessionId/reply', adminCtrl.sendHandoverReply);
+
+// Tickets Management (Employee filtered / Admin global)
+router.get('/tickets', adminCtrl.getAdminTickets);
+router.patch('/tickets/:ticketId', adminCtrl.updateAdminTicket);
 
 module.exports = router;

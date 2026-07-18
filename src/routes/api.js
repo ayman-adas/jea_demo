@@ -35,6 +35,9 @@ router.get('/health', apiController.getHealth);
 const { whatsappMinutelyLimiter, whatsappDailyLimiter } = require('../middleware/rateLimiters');
 const { validateWhatsappWebhook } = require('../middleware/validationMiddleware');
 
+// Queue monitoring (no auth for internal monitoring; add auth middleware if needed)
+router.get('/queue/status', whatsappController.getQueueStatus);
+
 // Twilio WhatsApp routes
 router.post('/whatsapp/send', upload.any(), whatsappController.sendWhatsApp);
 router.post(
@@ -42,7 +45,12 @@ router.post(
   whatsappMinutelyLimiter,
   whatsappDailyLimiter,
   validateWhatsappWebhook,
-  whatsappController.receiveWebhook
+  whatsappController.receiveWebhookQueued   // ← Queued entry point (returns 200 immediately)
 );
 
+// Payment Portal Submission Route
+router.post('/whatsapp/payment/submit', whatsappController.submitPayment);
+
 module.exports = router;
+
+

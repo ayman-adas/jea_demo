@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم نقابة المهندسين - Admin Panel</title>
+  <meta name="description" content="لوحة تحكم إدارة المحادثات والتحويل البشري - نقابة المهندسين الأردنيين">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --primary-glow: rgba(99, 102, 241, 0.35);
+      --accent: #22d3ee;
+      --accent-glow: rgba(34, 211, 238, 0.25);
+      --handover: #f59e0b;
+      --handover-glow: rgba(245, 158, 11, 0.35);
+      --success: #10b981;
+      --danger: #ef4444;
+      --bg: #070b18;
+      --bg-2: #0d1226;
+      --bg-3: #131929;
+      --surface: rgba(19, 25, 41, 0.85);
+      --surface-hover: rgba(30, 38, 60, 0.9);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(99, 102, 241, 0.5);
+      --text: #f1f5f9;
+      --text-muted: #64748b;
+      --text-sub: #94a3b8;
+      --inbound-bg: rgba(30, 38, 60, 0.9);
+      --outbound-bg: linear-gradient(135deg, #6366f1, #4f46e5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Cairo', 'Inter', sans-serif;
+      background: var(--bg);
+      background-image:
+        radial-gradient(at 5% 5%, rgba(99,102,241,0.12) 0, transparent 50%),
+        radial-gradient(at 95% 95%, rgba(34,211,238,0.08) 0, transparent 50%);
+      min-height: 100vh;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ── LAYOUT ────────────────────────────────────────────── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    #app-shell {
+      display: none;
+      height: 100vh;
+      grid-template-rows: 60px 1fr;
+      grid-template-columns: 300px 1fr;
+      grid-template-areas:
+        "topbar topbar"
+        "sidebar chat";
+    }
+
+    #app-shell.visible {
+      display: grid;
+    }
+
+    /* ── TOP BAR ───────────────────────────────────────────── */
+    #topbar {
+      grid-area: topbar;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 100;
+    }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .topbar-logo {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 18px var(--primary-glow);
+    }
+
+    .topbar-title {
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .topbar-subtitle {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .topbar-stats {
+      display: flex;
+      gap: 14px;
+    }
+
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .dot-green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .dot-amber { background: var(--handover); box-shadow: 0 0 6px var(--handover); }
+    .dot-blue  { background: var(--primary);  box-shadow: 0 0 6px var(--primary);  }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .agent-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.82rem;
+    }
+
+    .agent-avatar {
+      width: 26px;
+      height: 26px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .btn-icon {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s;
+      font-size: 14px;
+    }
+
+    .btn-icon:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* ── SIDEBAR ───────────────────────────────────────────── */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--bg-2);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .search-box {
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px 10px 38px;
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      direction: rtl;
+    }
+
+    .search-box input:focus { border-color: var(--primary); }
+    .search-box input::placeholder { color: var(--text-muted); }
+
+    .search-box i {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .filter-tab {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 4px;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 700;
+    }
+
+    .filter-tab.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    .session-list::-webkit-scrollbar { width: 4px; }
+    .session-list::-webkit-scrollbar-track { background: transparent; }
+    .session-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .session-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .session-item:hover { background: var(--surface-hover); }
+    .session-item.active { background: rgba(99,102,241,0.12); border-right: 3px solid var(--primary); }
+
+    .session-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+
+    .session-name {
+      font-size: 0.88rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-handover {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: var(--handover);
+      font-size: 0.62rem;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+
+    .badge-bot {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: var(--success);
+      font-size: 0.62rem;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-weight: 800;
+    }
+
+    .session-time {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .session-preview {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 230px;
+    }
+
+    /* ── CHAT AREA ─────────────────────────────────────────── */
+    #chat-area {
+      grid-area: chat;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .chat-header {
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 64px;
+    }
+
+    .chat-contact {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .contact-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #334155, #1e293b);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .contact-avatar.handover-mode {
+      border-color: var(--handover);
+      box-shadow: 0 0 16px var(--handover-glow);
+    }
+
+    .contact-info h3 {
+      font-size: 0.95rem;
+      font-weight: 800;
+    }
+
+    .contact-info p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      direction: ltr;
+    }
+
+    .chat-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-handover-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-size: 0.83rem;
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+    }
+
+    .btn-handover-toggle.off {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: var(--handover);
+    }
+
+    .btn-handover-toggle.off:hover {
+      background: rgba(245, 158, 11, 0.3);
+      box-shadow: 0 0 18px var(--handover-glow);
+    }
+
+    .btn-handover-toggle.on {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: var(--success);
+    }
+
+    .btn-handover-toggle.on:hover {
+      background: rgba(16, 185, 129, 0.3);
+    }
+
+    /* Messages thread */
+    .messages-thread {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .messages-thread::-webkit-scrollbar { width: 5px; }
+    .messages-thread::-webkit-scrollbar-track { background: transparent; }
+    .messages-thread::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .msg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .msg-row.inbound { justify-content: flex-end; }
+    .msg-row.outbound { justify-content: flex-start; }
+
+    .msg-bubble {
+      max-width: 65%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      position: relative;
+      word-break: break-word;
+    }
+
+    .msg-row.inbound .msg-bubble {
+      background: var(--inbound-bg);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-row.outbound .msg-bubble {
+      background: var(--outbound-bg);
+      border-bottom-right-radius: 4px;
+      color: white;
+    }
+
+    .msg-meta {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .msg-row.inbound .msg-meta { justify-content: flex-end; }
+
+    /* Empty state */
+    .empty-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      gap: 14px;
+    }
+
+    .empty-chat i { font-size: 52px; opacity: 0.3; }
+    .empty-chat h3 { font-size: 1.1rem; font-weight: 700; }
+    .empty-chat p { font-size: 0.85rem; opacity: 0.7; }
+
+    /* Reply bar */
+    #reply-bar {
+      background: var(--bg-2);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.3s;
+    }
+
+    #reply-bar.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    #reply-input {
+      flex: 1;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 11px 18px;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      resize: none;
+      min-height: 44px;
+      max-height: 120px;
+      transition: border-color 0.2s;
+      direction: rtl;
+    }
+
+    #reply-input:focus { border-color: var(--primary); }
+    #reply-input::placeholder { color: var(--text-muted); }
+
+    #send-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border: none;
+      color: white;
+      font-size: 17px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px var(--primary-glow);
+      transition: all 0.2s;
+    }
+
+    #send-btn:hover { transform: scale(1.08); }
+    #send-btn:active { transform: scale(0.95); }
+
+    /* ── LOGIN SCREEN ──────────────────────────────────────── */
+    .login-card {
+      background: rgba(13, 18, 38, 0.9);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .login-logo {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      margin: 0 auto 22px;
+      box-shadow: 0 0 28px var(--primary-glow);
+    }
+
+    .login-card h1 {
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 900;
+      margin-bottom: 4px;
+    }
+
+    .login-card .sub {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 28px;
+    }
+
+    .step-indicator {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: all 0.3s;
+    }
+
+    .step-dot.active {
+      background: var(--primary);
+      box-shadow: 0 0 8px var(--primary-glow);
+      width: 24px;
+      border-radius: 4px;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      background: rgba(11, 16, 36, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 13px 16px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s;
+      direction: rtl;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border: none;
+      border-radius: 14px;
+      padding: 14px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+      box-shadow: 0 6px 20px var(--primary-glow);
+      transition: all 0.3s;
+      margin-top: 8px;
+    }
+
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px var(--primary-glow); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .error-msg {
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #f87171;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 0.83rem;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    /* ── LOADING PULSE ─────────────────────────────────────── */
+    .loading-msg {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      padding: 30px;
+    }
+
+    /* ── HANDOVER BANNER ───────────────────────────────────── */
+    .handover-banner {
+      background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05));
+      border-bottom: 1px solid rgba(245,158,11,0.3);
+      padding: 8px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.82rem;
+      color: var(--handover);
+      font-weight: 700;
+    }
+
+    .handover-banner.hidden { display: none; }
+
+    /* ── SCROLLBAR (firefox) ───────────────────────────────── */
+    * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+    /* ── TOAST ─────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: rgba(19,25,41,0.97);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px 22px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      z-index: 9999;
+      backdrop-filter: blur(20px);
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 340px;
+      white-space: nowrap;
+    }
+
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: rgba(16,185,129,0.4); color: var(--success); }
+    #toast.error { border-color: rgba(239,68,68,0.4); color: #f87171; }
+    #toast.warning { border-color: rgba(245,158,11,0.4); color: var(--handover); }
+
+    /* Date separator */
+    .date-sep {
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      position: relative;
+      margin: 8px 0;
+    }
+
+    .date-sep::before, .date-sep::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 35%;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .date-sep::before { right: 0; }
+    .date-sep::after { left: 0; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo"><i class="fa-solid fa-shield-halved"></i></div>
+    <h1>لوحة التحكم</h1>
+    <p class="sub">نقابة المهندسين الأردنيين — Admin Portal</p>
+
+    <div class="step-indicator">
+      <div class="step-dot active" id="dot-1"></div>
+      <div class="step-dot" id="dot-2"></div>
+    </div>
+
+    <div id="error-box" class="error-msg"></div>
+
+    <!-- Step 1: username/password -->
+    <div id="step-credentials">
+      <div class="form-group">
+        <label class="form-label" for="inp-username">اسم المستخدم</label>
+        <input id="inp-username" class="form-control" type="text" placeholder="admin" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="inp-password">كلمة المرور</label>
+        <input id="inp-password" class="form-control" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-primary" id="btn-login" onclick="doLogin()">
+        <i class="fa-solid fa-arrow-left-to-bracket"></i> دخول
+      </button>
+    </div>
+
+    <!-- Step 2: OTP -->
+    <div id="step-otp" style="display:none;">
+      <div class="form-group">
+        <label class="form-label" for="inp-otp">رمز التحقق OTP</label>
+        <input id="inp-otp" class="form-control" type="text" placeholder="123456" maxlength="6" style="letter-spacing:5px;text-align:center;font-size:1.4rem;" autocomplete="one-time-code">
+      </div>
+      <button class="btn-primary" id="btn-otp" onclick="doOtp()">
+        <i class="fa-solid fa-key"></i> تحقق وادخل
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN APP SHELL
+═══════════════════════════════════════════════════════════════ -->
+<div id="app-shell">
+
+  <!-- TOP BAR -->
+  <header id="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-logo"><i class="fa-solid fa-message-lines"></i></div>
+      <div>
+        <div class="topbar-title">نقابة المهندسين — Agent Inbox</div>
+        <div class="topbar-subtitle">Handover Control Center</div>
+      </div>
+    </div>
+
+    <div class="topbar-stats">
+      <div class="stat-chip">
+        <span class="dot dot-green"></span>
+        <span id="stat-open">0</span> مفتوح
+      </div>
+      <div class="stat-chip">
+        <span class="dot dot-amber"></span>
+        <span id="stat-handover">0</span> Handover
+      </div>
+      <div class="stat-chip">
+        <span class="dot dot-blue"></span>
+        <span id="stat-tickets">0</span> تذكرة
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="agent-chip">
+        <div class="agent-avatar" id="agent-initials">A</div>
+        <span id="agent-name">Admin</span>
+      </div>
+      <button class="btn-icon" title="تحديث" onclick="refreshAll()"><i class="fa-solid fa-rotate"></i></button>
+      <button class="btn-icon" title="تسجيل الخروج" onclick="logout()" style="color:#ef4444;border-color:rgba(239,68,68,0.3)"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="search-input" type="text" placeholder="بحث عن رقم أو محادثة..." oninput="filterSessions()">
+      </div>
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="setFilter('all', this)">الكل</button>
+        <button class="filter-tab" onclick="setFilter('handover', this)">🤝 Handover</button>
+        <button class="filter-tab" onclick="setFilter('bot', this)">🤖 Bot</button>
+      </div>
+    </div>
+    <div class="session-list" id="session-list">
+      <div class="loading-msg"><i class="fa-solid fa-circle-notch fa-spin"></i> تحميل المحادثات...</div>
+    </div>
+  </aside>
+
+  <!-- CHAT AREA -->
+  <main id="chat-area">
+    <!-- Empty state -->
+    <div class="empty-chat" id="empty-state">
+      <i class="fa-regular fa-comments"></i>
+      <h3>اختر محادثة</h3>
+      <p>اختر محادثة من القائمة على اليمين لبدء المراجعة</p>
+    </div>
+
+    <!-- Active conversation (hidden by default) -->
+    <div id="conversation-view" style="display:none;flex-direction:column;height:100%;overflow:hidden;display:none;">
+      <!-- Chat header -->
+      <div class="chat-header">
+        <div class="chat-contact">
+          <div class="contact-avatar" id="cv-avatar">👤</div>
+          <div class="contact-info">
+            <h3 id="cv-name">—</h3>
+            <p id="cv-phone">—</p>
+          </div>
+        </div>
+        <div class="chat-actions">
+          <button class="btn-handover-toggle off" id="btn-handover-toggle" onclick="toggleHandover()">
+            <i class="fa-solid fa-person-arrow-up-from-line"></i>
+            <span id="handover-btn-text">تفعيل Handover</span>
+          </button>
+          <button class="btn-icon" title="تحديث المحادثة" onclick="loadMessages(activeSession)"><i class="fa-solid fa-rotate"></i></button>
+        </div>
+      </div>
+
+      <!-- Handover mode banner -->
+      <div class="handover-banner hidden" id="handover-banner">
+        <i class="fa-solid fa-headset"></i>
+        وضع الموظف البشري مفعّل — البوت متوقف. يمكنك الرد مباشرةً على المستخدم.
+      </div>
+
+      <!-- Messages thread -->
+      <div class="messages-thread" id="messages-thread"></div>
+
+      <!-- Reply bar -->
+      <div id="reply-bar" class="disabled">
+        <textarea id="reply-input" rows="1" placeholder="اكتب ردك هنا... (Handover مطلوب للرد)" onkeydown="handleReplyKey(event)"></textarea>
+        <button id="send-btn" onclick="sendReply()" title="إرسال">
+          <i class="fa-solid fa-paper-plane-top"></i>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+  const API = window.location.origin;
+  let accessToken = null;
+  let currentUsername = '';
+  let allSessions = [];
+  let activeSession = null;
+  let activeIsHandover = false;
+  let currentFilter = 'all';
+  let pollInterval = null;
+
+  // ── AUTH ─────────────────────────────────────────────────────
+  async function doLogin() {
+    const username = document.getElementById('inp-username').value.trim();
+    const password = document.getElementById('inp-password').value.trim();
+    if (!username || !password) return showError('يرجى ملء جميع الحقول');
+
+    const btn = document.getElementById('btn-login');
+    btn.disabled = true; btn.textContent = 'جار التحقق...';
+
+    try {
+      const r = await fetch(`${API}/api/admin/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.message || 'بيانات غير صحيحة');
+
+      currentUsername = username;
+      hideError();
+      showOtpStep();
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-arrow-left-to-bracket"></i> دخول';
+    }
+  }
+
+  function showOtpStep() {
+    document.getElementById('step-credentials').style.display = 'none';
+    document.getElementById('step-otp').style.display = '';
+    document.getElementById('dot-1').classList.remove('active');
+    document.getElementById('dot-2').classList.add('active');
+    document.getElementById('inp-otp').focus();
+  }
+
+  async function doOtp() {
+    const otp = document.getElementById('inp-otp').value.trim();
+    if (!otp) return showError('يرجى إدخال رمز التحقق');
+
+    const btn = document.getElementById('btn-otp');
+    btn.disabled = true; btn.textContent = 'جار التحقق...';
+
+    try {
+      const r = await fetch(`${API}/api/admin/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUsername, otp })
+      });
+      const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.message || 'رمز التحقق غير صحيح');
+
+      accessToken = d.data.accessToken;
+      const user = d.data.user;
+      document.getElementById('agent-name').textContent = user.name || currentUsername;
+      document.getElementById('agent-initials').textContent = (user.name || currentUsername)[0].toUpperCase();
+
+      hideError();
+      enterApp();
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-key"></i> تحقق وادخل';
+    }
+  }
+
+  function enterApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').classList.add('visible');
+    refreshAll();
+    pollInterval = setInterval(refreshSessions, 7000);
+  }
+
+  function logout() {
+    accessToken = null;
+    clearInterval(pollInterval);
+    location.reload();
+  }
+
+  // ── DATA ─────────────────────────────────────────────────────
+  async function authFetch(url, opts = {}) {
+    return fetch(url, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, ...(opts.headers || {}) }
+    });
+  }
+
+  async function refreshAll() {
+    await Promise.all([refreshSessions(), refreshStats()]);
+  }
+
+  async function refreshStats() {
+    try {
+      const r = await authFetch(`${API}/api/admin/dashboard`);
+      const d = await r.json();
+      if (d.success) {
+        document.getElementById('stat-open').textContent = d.data.sessions.open;
+        document.getElementById('stat-handover').textContent = d.data.sessions.handover;
+        document.getElementById('stat-tickets').textContent = d.data.tickets.open;
+      }
+    } catch {}
+  }
+
+  async function refreshSessions() {
+    try {
+      const r = await authFetch(`${API}/api/admin/sessions?limit=100`);
+      const d = await r.json();
+      if (d.success) {
+        allSessions = d.data;
+        renderSessionList();
+      }
+    } catch {}
+  }
+
+  function renderSessionList() {
+    const query = document.getElementById('search-input').value.trim().toLowerCase();
+    let list = allSessions;
+
+    if (currentFilter === 'handover') list = list.filter(s => s.is_handover);
+    if (currentFilter === 'bot') list = list.filter(s => !s.is_handover);
+    if (query) list = list.filter(s =>
+      s.phone.includes(query) || (s.customer_name || '').toLowerCase().includes(query)
+    );
+
+    const el = document.getElementById('session-list');
+    if (!list.length) {
+      el.innerHTML = `<div class="loading-msg" style="opacity:0.5"><i class="fa-regular fa-inbox"></i><br>لا توجد محادثات</div>`;
+      return;
+    }
+
+    el.innerHTML = list.map(s => {
+      const isActive = activeSession === s.id;
+      const label = s.customer_name !== s.phone ? s.customer_name : s.phone;
+      const preview = (s.last_message || '').substring(0, 55);
+      const badge = s.is_handover
+        ? '<span class="badge-handover">🤝 Handover</span>'
+        : '<span class="badge-bot">🤖 Bot</span>';
+      const time = s.last_message_at ? formatTime(s.last_message_at) : '';
+      return `
+        <div class="session-item ${isActive ? 'active' : ''}" id="sitem-${encodeId(s.id)}" onclick="openSession('${escStr(s.id)}')">
+          <div class="session-item-header">
+            <div class="session-name">${escHtml(label)} ${badge}</div>
+            <div class="session-time">${time}</div>
+          </div>
+          <div class="session-preview">${escHtml(preview) || '<em style="opacity:0.4">لا رسائل</em>'}</div>
+        </div>`;
+    }).join('');
+  }
+
+  async function openSession(sessionId) {
+    activeSession = sessionId;
+    document.getElementById('empty-state').style.display = 'none';
+    const cv = document.getElementById('conversation-view');
+    cv.style.display = 'flex';
+    cv.style.flexDirection = 'column';
+
+    // Update sidebar active state
+    document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+    const itemEl = document.getElementById('sitem-' + encodeId(sessionId));
+    if (itemEl) itemEl.classList.add('active');
+
+    // Find session data
+    const s = allSessions.find(x => x.id === sessionId) || {};
+    const name = s.customer_name || sessionId;
+
+    document.getElementById('cv-name').textContent = name;
+    document.getElementById('cv-phone').textContent = sessionId;
+    updateHandoverUI(s.is_handover);
+
+    await loadMessages(sessionId);
+  }
+
+  async function loadMessages(sessionId) {
+    if (!sessionId) return;
+    const thread = document.getElementById('messages-thread');
+    thread.innerHTML = `<div class="loading-msg"><i class="fa-solid fa-circle-notch fa-spin"></i> تحميل الرسائل...</div>`;
+
+    try {
+      const r = await authFetch(`${API}/api/admin/sessions/${encodeURIComponent(sessionId)}/messages`);
+      const d = await r.json();
+      if (!d.success) throw new Error(d.message);
+
+      const msgs = d.data;
+      if (!msgs.length) {
+        thread.innerHTML = `<div class="loading-msg" style="opacity:0.4"><i class="fa-regular fa-comments"></i><br>لا رسائل بعد</div>`;
+        return;
+      }
+
+      let html = '';
+      let lastDate = '';
+      for (const m of msgs) {
+        const isOut = m.direction === 'outbound';
+        const dateStr = m.created_at ? new Date(m.created_at).toLocaleDateString('ar-JO') : '';
+        if (dateStr && dateStr !== lastDate) {
+          html += `<div class="date-sep">${dateStr}</div>`;
+          lastDate = dateStr;
+        }
+        const time = m.created_at ? new Date(m.created_at).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' }) : '';
+        html += `
+          <div class="msg-row ${isOut ? 'outbound' : 'inbound'}">
+            <div>
+              <div class="msg-bubble">${escHtml(m.content)}</div>
+              <div class="msg-meta">
+                ${time}
+                ${isOut ? '<i class="fa-solid fa-check-double" style="color:var(--accent);font-size:10px"></i>' : ''}
+              </div>
+            </div>
+          </div>`;
+      }
+      thread.innerHTML = html;
+      thread.scrollTop = thread.scrollHeight;
+    } catch (e) {
+      thread.innerHTML = `<div class="loading-msg" style="color:#f87171"><i class="fa-solid fa-triangle-exclamation"></i> فشل تحميل الرسائل</div>`;
+    }
+  }
+
+  // ── HANDOVER ─────────────────────────────────────────────────
+  async function toggleHandover() {
+    if (!activeSession) return;
+    const s = allSessions.find(x => x.id === activeSession);
+    const newVal = !(s?.is_handover);
+
+    try {
+      const r = await authFetch(`${API}/api/admin/sessions/${encodeURIComponent(activeSession)}/handover`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_handover: newVal })
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.message);
+
+      if (s) s.is_handover = newVal;
+      updateHandoverUI(newVal);
+      renderSessionList();
+      await refreshStats();
+
+      showToast(
+        newVal
+          ? '🤝 تم تفعيل وضع Handover — البوت متوقف والموظف يتولى المحادثة'
+          : '🤖 تم إعادة تفعيل البوت — الموظف غادر المحادثة',
+        newVal ? 'warning' : 'success'
+      );
+    } catch (e) {
+      showToast('فشل تغيير وضع Handover: ' + e.message, 'error');
+    }
+  }
+
+  function updateHandoverUI(isHandover) {
+    activeIsHandover = isHandover;
+    const btn = document.getElementById('btn-handover-toggle');
+    const btnText = document.getElementById('handover-btn-text');
+    const banner = document.getElementById('handover-banner');
+    const replyBar = document.getElementById('reply-bar');
+    const avatar = document.getElementById('cv-avatar');
+    const replyInput = document.getElementById('reply-input');
+
+    if (isHandover) {
+      btn.className = 'btn-handover-toggle on';
+      btn.innerHTML = '<i class="fa-solid fa-robot"></i> <span>إعادة البوت</span>';
+      banner.classList.remove('hidden');
+      replyBar.classList.remove('disabled');
+      replyInput.placeholder = 'اكتب ردك للمستخدم... (Enter للإرسال)';
+      avatar.classList.add('handover-mode');
+    } else {
+      btn.className = 'btn-handover-toggle off';
+      btn.innerHTML = '<i class="fa-solid fa-person-arrow-up-from-line"></i> <span>تفعيل Handover</span>';
+      banner.classList.add('hidden');
+      replyBar.classList.add('disabled');
+      replyInput.placeholder = 'فعّل وضع Handover أولاً للرد...';
+      avatar.classList.remove('handover-mode');
+    }
+  }
+
+  // ── REPLY ────────────────────────────────────────────────────
+  async function sendReply() {
+    if (!activeSession || !activeIsHandover) return;
+    const input = document.getElementById('reply-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const btn = document.getElementById('send-btn');
+    btn.disabled = true;
+
+    try {
+      const r = await authFetch(`${API}/api/admin/sessions/${encodeURIComponent(activeSession)}/reply`, {
+        method: 'POST',
+        body: JSON.stringify({ message: msg })
+      });
+      const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.message);
+
+      input.value = '';
+      await loadMessages(activeSession);
+      await refreshSessions();
+      showToast('✅ تم إرسال الرد بنجاح', 'success');
+    } catch (e) {
+      showToast('فشل إرسال الرد: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function handleReplyKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendReply();
+    }
+  }
+
+  // ── FILTERS ──────────────────────────────────────────────────
+  function setFilter(f, el) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    renderSessionList();
+  }
+
+  function filterSessions() { renderSessionList(); }
+
+  // ── UTILS ────────────────────────────────────────────────────
+  function showError(msg) {
+    const el = document.getElementById('error-box');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function hideError() {
+    document.getElementById('error-box').style.display = 'none';
+  }
+
+  let toastTimer = null;
+  function showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const now = new Date();
+    const diffH = (now - d) / 3600000;
+    if (diffH < 24) return d.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('ar-JO', { month: 'short', day: 'numeric' });
+  }
+
+  function encodeId(id) { return id.replace(/[^a-zA-Z0-9]/g, '_'); }
+  function escHtml(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function escStr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+  // ── KEYBOARD SHORTCUTS ────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('step-credentials').style.display !== 'none') doLogin();
+    if (e.key === 'Enter' && document.getElementById('step-otp').style.display !== 'none') doOtp();
+  });
+</script>
+</body>
+</html>

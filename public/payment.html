@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بوابة الدفع الإلكتروني - نقابة المهندسين الأردنيين</title>
+  <!-- Google Fonts: Cairo & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --primary: #00a884;
+      --primary-glow: rgba(0, 168, 132, 0.4);
+      --primary-hover: #008f70;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.4);
+      --bg-dark: #0b1329;
+      --card-bg: rgba(23, 32, 54, 0.75);
+      --border-color: rgba(255, 255, 255, 0.12);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --gradient-card: linear-gradient(135deg, #10b981 0%, #047857 100%);
+      --gradient-brand: linear-gradient(135deg, #00a884 0%, #059669 100%);
+      --gradient-dark: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      --shadow-glow: 0 12px 32px -8px rgba(0, 168, 132, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Cairo', 'Inter', sans-serif;
+      background: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 10% 10%, rgba(0, 168, 132, 0.18) 0px, transparent 55%),
+        radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.12) 0px, transparent 55%);
+      min-height: 100vh;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    /* Simulation Control Bar */
+    .sim-bar {
+      width: 100%;
+      max-width: 920px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px dashed var(--border-color);
+      border-radius: 16px;
+      padding: 10px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+    }
+
+    .sim-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sim-options {
+      display: flex;
+      gap: 8px;
+    }
+
+    .sim-btn {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 6px 14px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .sim-btn.active-success {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .sim-btn.active-fail {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 920px;
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 850px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.45);
+    }
+
+    .brand-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .brand-icon {
+      width: 52px;
+      height: 52px;
+      background: var(--gradient-brand);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: white;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .brand-title h2 {
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+
+    .brand-title p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .summary-box {
+      background: rgba(11, 19, 41, 0.6);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      font-size: 0.92rem;
+    }
+
+    .summary-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .summary-label {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .summary-val {
+      font-weight: 700;
+      color: var(--text-main);
+      text-align: left;
+      direction: ltr;
+    }
+
+    .price-total {
+      background: var(--gradient-brand);
+      border-radius: 18px;
+      padding: 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .price-total .total-label {
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .price-total .total-amount {
+      font-size: 1.7rem;
+      font-weight: 900;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 12px 6px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.3s ease;
+    }
+
+    .tab-btn i {
+      font-size: 1.25rem;
+    }
+
+    .tab-btn.active {
+      background: var(--gradient-brand);
+      color: white;
+      border-color: var(--primary);
+      box-shadow: var(--shadow-glow);
+    }
+
+    /* 3D CREDIT CARD CONTAINER */
+    .card-3d-wrapper {
+      perspective: 1000px;
+      width: 100%;
+      height: 190px;
+      margin-bottom: 24px;
+    }
+
+    .card-3d {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+      border-radius: 20px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    }
+
+    .card-3d.flipped {
+      transform: rotateY(180deg);
+    }
+
+    .card-front, .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 20px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    .card-front {
+      background: linear-gradient(135deg, #059669 0%, #0f172a 100%);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .card-front::before {
+      content: '';
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+    }
+
+    .card-back {
+      background: linear-gradient(135deg, #0f172a 0%, #047857 100%);
+      transform: rotateY(180deg);
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .card-strip {
+      width: 100%;
+      height: 42px;
+      background: #000;
+      margin-top: 20px;
+    }
+
+    .card-cvc-box {
+      background: #f8fafc;
+      color: #0f172a;
+      width: 80%;
+      height: 36px;
+      margin: 16px auto;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 12px;
+      font-family: 'Inter', monospace;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-chip {
+      width: 44px;
+      height: 30px;
+      background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+      border-radius: 6px;
+    }
+
+    .card-number-display {
+      font-family: 'Inter', monospace;
+      font-size: 1.3rem;
+      letter-spacing: 2.5px;
+      direction: ltr;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .card-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      font-size: 0.85rem;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(11, 19, 41, 0.85);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 14px 18px;
+      color: white;
+      font-size: 1rem;
+      font-family: 'Inter', 'Cairo', sans-serif;
+      outline: none;
+      transition: all 0.3s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.2);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .btn-pay {
+      width: 100%;
+      background: var(--gradient-brand);
+      border: none;
+      border-radius: 16px;
+      padding: 18px;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: var(--shadow-glow);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-pay:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+    }
+
+    .btn-pay:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Modal Overlay & Cards */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(11, 19, 41, 0.88);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.4s ease;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 28px;
+      padding: 38px;
+      max-width: 460px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+      transform: scale(0.9);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: scale(1);
+    }
+
+    .icon-box {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+      margin: 0 auto 22px;
+    }
+
+    .icon-box.success {
+      background: rgba(0, 168, 132, 0.2);
+      border: 2px solid var(--primary);
+      color: var(--primary);
+      box-shadow: 0 0 30px var(--primary-glow);
+    }
+
+    .icon-box.failure {
+      background: rgba(239, 68, 68, 0.2);
+      border: 2px solid var(--danger);
+      color: var(--danger);
+      box-shadow: 0 0 30px var(--danger-glow);
+    }
+
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    .info-badge {
+      background: rgba(0, 168, 132, 0.12);
+      border: 1px solid rgba(0, 168, 132, 0.3);
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 0.88rem;
+      color: #6ee7b7;
+      margin-bottom: 18px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Test Simulation Control Bar -->
+  <div class="sim-bar">
+    <div class="sim-title">
+      <i class="fa-solid fa-flask"></i> وضع تجربة عملية الدفع:
+    </div>
+    <div class="sim-options">
+      <button class="sim-btn active-success" id="sim-success-btn" onclick="setSimMode('success')">
+        🟢 نجاح الدفع
+      </button>
+      <button class="sim-btn" id="sim-fail-btn" onclick="setSimMode('fail')">
+        🔴 فشل الدفع (Card Declined)
+      </button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Left / Summary Panel -->
+    <div class="panel">
+      <div class="brand-header">
+        <div class="brand-icon">
+          <i class="fa-solid fa-building-columns"></i>
+        </div>
+        <div class="brand-title">
+          <h2>نقابة المهندسين الأردنيين</h2>
+          <p>بوابة الدفع الإلكتروني المباشر 🔒 256-bit SSL</p>
+        </div>
+      </div>
+
+      <div class="summary-box">
+        <div class="summary-item">
+          <span class="summary-label"><i class="fa-solid fa-file-contract"></i> الخدمة المطلوبة:</span>
+          <span class="summary-val" id="display-service">إصدار شهادة عضوية</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label"><i class="fa-solid fa-id-card"></i> رقم العضوية:</span>
+          <span class="summary-val" id="display-member-id">123456</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label"><i class="fa-solid fa-phone"></i> رقم الهاتف:</span>
+          <span class="summary-val" id="display-phone">+962 7 7760 2924</span>
+        </div>
+        <div class="summary-item" id="address-row">
+          <span class="summary-label"><i class="fa-solid fa-location-dot"></i> التفاصيل:</span>
+          <span class="summary-val" id="display-address">عمان، الأردن</span>
+        </div>
+      </div>
+
+      <div class="price-total">
+        <span class="total-label">المبلغ الإجمالي المستحق:</span>
+        <span class="total-amount" id="display-amount">15.00 JOD</span>
+      </div>
+    </div>
+
+    <!-- Right / Payment Method Form Panel -->
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('card')">
+          <i class="fa-solid fa-credit-card"></i>
+          <span>بطاقة ائتمان</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('efawateer')">
+          <i class="fa-solid fa-receipt"></i>
+          <span>إي فواتيركم</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('cliq')">
+          <i class="fa-solid fa-bolt"></i>
+          <span>CliQ كليك</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('applepay')">
+          <i class="fa-brands fa-apple"></i>
+          <span>Apple Pay</span>
+        </button>
+      </div>
+
+      <!-- Tab 1: Credit Card -->
+      <div id="tab-card" class="tab-content active">
+        <!-- 3D FLIPPABLE CREDIT CARD -->
+        <div class="card-3d-wrapper">
+          <div class="card-3d" id="credit-card-3d">
+            <!-- Front View -->
+            <div class="card-front">
+              <div class="card-top">
+                <div class="card-chip"></div>
+                <i class="fa-brands fa-cc-visa" style="font-size: 36px; color: white;"></i>
+              </div>
+              <div class="card-number-display" id="card-num-preview">4532 •••• •••• ••••</div>
+              <div class="card-bottom">
+                <div id="card-holder-preview">اسم حامل البطاقة</div>
+                <div id="card-exp-preview">MM/YY</div>
+              </div>
+            </div>
+            <!-- Back View (Shows on CVC focus) -->
+            <div class="card-back">
+              <div class="card-strip"></div>
+              <div class="card-cvc-box" id="card-cvc-preview">•••</div>
+            </div>
+          </div>
+        </div>
+
+        <form id="payment-form" onsubmit="handlePaymentSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">رقم البطاقة الائتمانية</label>
+            <input type="text" id="card-number" class="form-input" placeholder="4532 1234 5678 9010" maxlength="19" required oninput="formatCardNumber(this); updateCardPreview()">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">تاريخ الانتهاء</label>
+              <input type="text" id="card-exp" class="form-input" placeholder="MM/YY" maxlength="5" required oninput="formatCardExp(this); updateCardPreview()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">رمز الأمان (CVC)</label>
+              <input type="password" id="card-cvc" class="form-input" placeholder="•••" maxlength="4" required onfocus="flipCard(true)" onblur="flipCard(false)" oninput="updateCardPreview()">
+            </div>
+          </div>
+
+          <button type="submit" class="btn-pay" id="pay-submit-btn">
+            <span>تأكيد ودفع المبلغ</span>
+            <div class="spinner" id="pay-spinner"></div>
+          </button>
+        </form>
+      </div>
+
+      <!-- Tab 2: eFAWATEERcom -->
+      <div id="tab-efawateer" class="tab-content">
+        <div class="info-badge">
+          <i class="fa-solid fa-circle-info"></i> المفوتر: <b>نقابة المهندسين الأردنيين</b>
+        </div>
+        <div class="form-group">
+          <label class="form-label">رقم مرجع الفاتورة (Bill Reference):</label>
+          <input type="text" class="form-input" id="efawateer-code" readonly value="JEA-2026-98124" style="text-align: center; font-weight: 800; letter-spacing: 1px;">
+        </div>
+        <button type="button" class="btn-pay" onclick="handleMockMethodSubmit('eFAWATEERcom')">
+          <span>تأكيد الدفع عبر إي فواتيركم</span>
+        </button>
+      </div>
+
+      <!-- Tab 3: CliQ -->
+      <div id="tab-cliq" class="tab-content">
+        <div class="info-badge">
+          <i class="fa-solid fa-bolt"></i> CliQ Alias: <b>JEA-PAY</b>
+        </div>
+        <div class="form-group">
+          <label class="form-label">اسم المستلم في CliQ:</label>
+          <input type="text" class="form-input" readonly value="JEA-PAY" style="text-align: center; font-weight: 800; letter-spacing: 1px;">
+        </div>
+        <button type="button" class="btn-pay" onclick="handleMockMethodSubmit('CliQ')">
+          <span>تأكيد التحويل عبر CliQ</span>
+        </button>
+      </div>
+
+      <!-- Tab 4: Apple Pay -->
+      <div id="tab-applepay" class="tab-content">
+        <div class="info-badge">
+          <i class="fa-brands fa-apple"></i> دفع سريع بلمسة واحدة
+        </div>
+        <button type="button" class="btn-pay" style="background: #000;" onclick="handleMockMethodSubmit('Apple Pay')">
+          <i class="fa-brands fa-apple" style="font-size: 24px;"></i>
+          <span>Pay with Apple Pay</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SUCCESS MODAL -->
+  <div class="modal-overlay" id="success-modal">
+    <div class="modal-card">
+      <div class="icon-box success">
+        <i class="fa-solid fa-check"></i>
+      </div>
+      <h2 style="font-size: 1.4rem; font-weight: 900; margin-bottom: 8px;">تمت عملية الدفع بنجاح!</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+        تم استلام مبلغ الخدمة بنجاح، وإرسال الإيصال وتأكيد الطلب مباشرة على الواتساب.
+      </p>
+      <div class="summary-box" style="margin-bottom: 22px; text-align: right;">
+        <div class="summary-item">
+          <span class="summary-label">رقم العملية:</span>
+          <span class="summary-val" id="modal-success-ref">TXN-894125</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">حالة الطلب:</span>
+          <span class="summary-val" style="color: var(--primary);">مكتمل ومسجل ✅</span>
+        </div>
+      </div>
+      <button class="btn-pay" onclick="window.close()">
+        <span>إغلاق والعودة للواتساب</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- FAILURE MODAL -->
+  <div class="modal-overlay" id="failure-modal">
+    <div class="modal-card">
+      <div class="icon-box failure">
+        <i class="fa-solid fa-circle-xmark"></i>
+      </div>
+      <h2 style="font-size: 1.4rem; font-weight: 900; margin-bottom: 8px; color: var(--danger);">تعذرت عملية الدفع!</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+        تم رفض العملية من البنك (Card Declined). يرجى التأكد من الرصيد أو تجربة طريقة دفع أخرى.
+      </p>
+      <div class="summary-box" style="margin-bottom: 22px; text-align: right; border-color: rgba(239, 68, 68, 0.3);">
+        <div class="summary-item">
+          <span class="summary-label">سبب الفشل:</span>
+          <span class="summary-val" style="color: var(--danger);">بطاقة مرفوضة / رصيد غير كافٍ</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">التنبيه:</span>
+          <span class="summary-val" style="color: var(--text-muted);">تم إرسال خيارات الإعادة على الواتساب</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button class="btn-pay" style="background: var(--gradient-dark);" onclick="retryPaymentInPortal()">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>إعادة المحاولة مع طريقة دفع أخرى</span>
+        </button>
+        <button class="btn-pay" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); color: var(--danger);" onclick="window.close()">
+          <span>إغلاق والعودة للواتساب</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const phoneParam = urlParams.get('phone') || '+962777602924';
+    const memberIdParam = urlParams.get('memberId') || '123456';
+    const amountParam = urlParams.get('amount') || '15.00';
+    const addressParam = urlParams.get('address') || 'عمان، الأردن';
+
+    document.getElementById('display-member-id').innerText = memberIdParam;
+    document.getElementById('display-phone').innerText = phoneParam;
+    document.getElementById('display-amount').innerText = `${amountParam} JOD`;
+    document.getElementById('display-address').innerText = addressParam;
+    document.getElementById('efawateer-code').value = `JEA-${memberIdParam}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    let simMode = 'success';
+
+    function setSimMode(mode) {
+      simMode = mode;
+      document.getElementById('sim-success-btn').className = mode === 'success' ? 'sim-btn active-success' : 'sim-btn';
+      document.getElementById('sim-fail-btn').className = mode === 'fail' ? 'sim-btn active-fail' : 'sim-btn';
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+    function flipCard(shouldFlip) {
+      const card = document.getElementById('credit-card-3d');
+      if (shouldFlip) {
+        card.classList.add('flipped');
+      } else {
+        card.classList.remove('flipped');
+      }
+    }
+
+    function formatCardNumber(input) {
+      let val = input.value.replace(/\D/g, '').substring(0, 16);
+      let formatted = val.match(/.{1,4}/g)?.join(' ') || val;
+      input.value = formatted;
+    }
+
+    function formatCardExp(input) {
+      let val = input.value.replace(/\D/g, '').substring(0, 4);
+      if (val.length >= 3) {
+        input.value = val.substring(0, 2) + '/' + val.substring(2);
+      } else {
+        input.value = val;
+      }
+    }
+
+    function updateCardPreview() {
+      const numInput = document.getElementById('card-number').value;
+      const expInput = document.getElementById('card-exp').value;
+      const cvcInput = document.getElementById('card-cvc').value;
+
+      document.getElementById('card-num-preview').innerText = numInput || '4532 •••• •••• ••••';
+      document.getElementById('card-exp-preview').innerText = expInput || 'MM/YY';
+      document.getElementById('card-cvc-preview').innerText = cvcInput || '•••';
+    }
+
+    const API_BASE = window.location.origin;
+
+    async function submitPaymentToBackend(paymentMethod) {
+      const payBtn = document.getElementById('pay-submit-btn');
+      const spinner = document.getElementById('pay-spinner');
+      
+      if (payBtn) payBtn.disabled = true;
+      if (spinner) spinner.style.display = 'inline-block';
+
+      const transactionRef = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
+      const isSuccess = simMode === 'success';
+
+      try {
+        const response = await fetch(`${API_BASE}/api/whatsapp/payment/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cleanPhone: phoneParam,
+            memberId: memberIdParam,
+            amount: amountParam,
+            paymentMethod: paymentMethod,
+            transactionRef: transactionRef,
+            address: addressParam,
+            status: isSuccess ? 'success' : 'failed',
+            failureReason: isSuccess ? null : 'Card Declined / Insufficient Funds'
+          })
+        });
+
+        const data = await response.json();
+        
+        if (isSuccess && response.ok && data.success) {
+          document.getElementById('modal-success-ref').innerText = transactionRef;
+          document.getElementById('success-modal').classList.add('active');
+        } else {
+          document.getElementById('failure-modal').classList.add('active');
+        }
+      } catch (err) {
+        console.error('Payment API error:', err);
+        if (isSuccess) {
+          document.getElementById('modal-success-ref').innerText = transactionRef;
+          document.getElementById('success-modal').classList.add('active');
+        } else {
+          document.getElementById('failure-modal').classList.add('active');
+        }
+      } finally {
+        if (payBtn) payBtn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
+      }
+    }
+
+    function handlePaymentSubmit(e) {
+      e.preventDefault();
+      submitPaymentToBackend('Visa / MasterCard');
+    }
+
+    function handleMockMethodSubmit(methodName) {
+      submitPaymentToBackend(methodName);
+    }
+
+    function retryPaymentInPortal() {
+      document.getElementById('failure-modal').classList.remove('active');
+      switchTab('efawateer');
+    }
+  </script>
+</body>
+</html>

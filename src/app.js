@@ -20,8 +20,20 @@ app.use(
   express.static(path.join(__dirname, "..", "tmp_uploads")),
 );
 
-// Serve admin panel static files
+// Serve public static files for Payment Portal & Admin Panel
+app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/admin", express.static(path.join(__dirname, "..", "public")));
+
+// Payment portal route
+app.get("/payment", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "payment.html"));
+});
+
+// Admin panel route
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "admin.html"));
+});
+
 
 // CORS & Preflight middleware
 app.use((req, res, next) => {

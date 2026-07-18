@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../src/app');
-const { User, Customer, Session, Message, Ticket, AuditLog, sequelize } = require('../src/models');
+const { User, Customer, Employee, Session, Message, Ticket, AuditLog, sequelize } = require('../src/models');
+const { generateAccessToken } = require('../src/middleware/authMiddleware');
 
 describe('CRUD API Routes (/api/v1)', () => {
   beforeAll(async () => {
@@ -210,6 +211,105 @@ describe('CRUD API Routes (/api/v1)', () => {
     it('should delete Ticket', async () => {
       const res = await request(app).delete(`/api/v1/tickets/${testTicket.ticket_id}`);
       expect(res.status).toBe(200 || 204);
+    });
+  });
+
+  describe('Employee Secure Tickets CRUD (/api/admin)', () => {
+    let employeeToken = '';
+    const testEmployeeId = 'emp_ticket_test';
+    const testCustId = 'cust_for_emp_test';
+
+    beforeAll(async () => {
+      // Seed employee user
+      await User.create({
+        user_id: testEmployeeId,
+        name: 'Test Employee',
+        user_type: 'EMPLOYEE',
+        status: 'ACTIVE'
+      });
+      await Employee.create({
+        id: testEmployeeId,
+        role: 'SUPPORT'
+      });
+
+      // Generate token for employee
+      employeeToken = generateAccessToken({
+        user_id: testEmployeeId,
+        name: 'Test Employee',
+        user_type: 'EMPLOYEE',
+        status: 'ACTIVE'
+      });
+
+      // Seed customer
+      await User.create({
+        user_id: testCustId,
+        name: 'Test Customer',
+        user_type: 'CUSTOMER',
+        status: 'ACTIVE'
+      });
+      await Customer.create({
+        member_id: testCustId,
+        phone: '+962777999888',
+        gender: 'MALE',
+        role: 'MEMBER'
+      });
+
+      // Seed a ticket assigned to this employee
+      await Ticket.create({
+        ticket_id: 'tkt_emp_assigned',
+        title: 'Assigned to Employee',
+        content: 'This ticket belongs to employee',
+        status: 'OPEN',
+        ticket_priority: 'MEDIUM',
+        user_id: testCustId,
+        emp_assigned: testEmployeeId
+      });
+
+      // Seed a ticket assigned to another employee / unassigned
+      await Ticket.create({
+        ticket_id: 'tkt_unassigned',
+        title: 'Unassigned Ticket',
+        content: 'No one is assigned',
+        status: 'OPEN',
+        ticket_priority: 'MEDIUM',
+        user_id: testCustId,
+        emp_assigned: null
+      });
+    });
+
+    it('should allow employee to get only their assigned tickets', async () => {
+      const res = await request(app)
+        .get('/api/admin/tickets')
+        .set('Authorization', `Bearer ${employeeToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      
+      // Should return exactly 1 ticket (tkt_emp_assigned)
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.data[0].ticket_id).toBe('tkt_emp_assigned');
+    });
+
+    it('should allow employee to update their assigned ticket status', async () => {
+      const res = await request(app)
+        .patch('/api/admin/tickets/tkt_emp_assigned')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ status: 'CLOSED' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.status).toBe('CLOSED');
+    });
+
+    it('should deny employee from updating unassigned/other tickets', async () => {
+      const res = await request(app)
+        .patch('/api/admin/tickets/tkt_unassigned')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ status: 'CLOSED' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('FORBIDDEN');
     });
   });
 });

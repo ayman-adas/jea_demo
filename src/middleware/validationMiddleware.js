@@ -63,10 +63,8 @@ const whatsappWebhookSchema = Joi.object({
   From: Joi.string().required().messages({
     'any.required': 'رقم المرسل (From) مطلوب لتحديد العميل.'
   }),
-  Body: Joi.string().required().messages({
-    'any.required': 'نص الرسالة (Body) مطلوب.'
-  })
-});
+  Body: Joi.string().optional().allow('', null)
+}).or('Body', 'FlowData', 'ButtonPayload', 'InteractiveData', 'StructuredData', 'NumMedia');
 
 module.exports = {
   validateLogin: validateBody(loginSchema),

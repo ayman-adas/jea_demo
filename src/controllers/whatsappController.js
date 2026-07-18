@@ -6,8 +6,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { uploadToFTP } = require('../config/ftp');
 const { Customer, User, Session, Message, ServiceCategory, QA, Ticket, Notification, EmployeeServiceCategory, Rating } = require('../models');
+const { Op } = require('sequelize');
 const { getTranslation } = require('../config/localization');
 const { getAnswer } = require('../services/qaEngine');
+
+const normalizePhone = (input) => {
+  if (!input) return '';
+  let cleaned = input.replace(/\s+/g, '').replace(/[-()]/g, '');
+  if (cleaned.startsWith('00962')) {
+    cleaned = '+962' + cleaned.slice(5);
+  } else if (cleaned.startsWith('962')) {
+    cleaned = '+' + cleaned;
+  } else if (cleaned.startsWith('07') && cleaned.length === 10) {
+    cleaned = '+962' + cleaned.slice(1);
+  }
+  return cleaned;
+};
+
+const parseArabicDigits = (str) => {
+  if (!str) return '';
+  return str.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+};
+
 
 // Helper to download media from a URL, recursively following HTTP redirects
 const downloadMediaWithRedirect = (url, destPath) => {
@@ -161,6 +181,153 @@ const getPublicUrl = async (req) => {
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const host = req.get('host');
   return `${protocol}://${host}`;
+};
+
+// Helper to parse WhatsApp Flow submission payloads (e.g. customer_satisfaction_ar)
+const parseFlowSubmission = (reqBody) => {
+  let rawJson = reqBody.FlowData || reqBody.ButtonPayload || reqBody.InteractiveData || reqBody.StructuredData;
+  let parsed = null;
+
+  if (rawJson) {
+    if (typeof rawJson === 'string') {
+      try { parsed = JSON.parse(rawJson); } catch (e) { parsed = null; }
+    } else if (typeof rawJson === 'object') {
+      parsed = rawJson;
+    }
+  }
+
+  if (!parsed && reqBody.Body && typeof reqBody.Body === 'string' && reqBody.Body.trim().startsWith('{') && reqBody.Body.trim().endsWith('}')) {
+    try { parsed = JSON.parse(reqBody.Body.trim()); } catch (e) { parsed = null; }
+  }
+
+  if (!parsed) return null;
+
+  let rateValue = null;
+  let comments = null;
+  const dataObj = parsed.data || parsed;
+
+  for (const [key, val] of Object.entries(dataObj)) {
+    if (val === null || val === undefined) continue;
+    const strVal = String(val).trim();
+    if (!strVal) continue;
+
+    const keyLower = key.toLowerCase();
+
+    if (keyLower.includes('comment') || keyLower.includes('reason') || keyLower.includes('feedback') || keyLower.includes('note') || keyLower.includes('question_2') || keyLower.includes('ملاحظ') || keyLower.includes('سبب')) {
+      comments = strVal;
+      continue;
+    }
+
+    if (rateValue === null) {
+      if (/^[1-5](\.0)?$/.test(strVal)) {
+        rateValue = Number.parseFloat(strVal);
+      } else if (/^[1-5]$/.test(key)) {
+        rateValue = Number.parseFloat(key);
+      } else if (typeof val === 'string' && (strVal.includes('ممتاز') || strVal.includes('جيد') || strVal.includes('مقبول') || strVal.includes('ضعيف'))) {
+        if (strVal.includes('5') || strVal.includes('ممتاز')) rateValue = 5;
+        else if (strVal.includes('4') || strVal.includes('جيد جداً')) rateValue = 4;
+        else if (strVal.includes('3') || strVal.includes('جيد')) rateValue = 3;
+        else if (strVal.includes('2') || strVal.includes('مقبول')) rateValue = 2;
+        else if (strVal.includes('1') || strVal.includes('ضعيف')) rateValue = 1;
+      }
+    } else if (!comments && typeof val === 'string' && !/^[1-5]$/.test(strVal)) {
+      comments = strVal;
+    }
+  }
+
+  if (!rateValue && (parsed.rate_value || parsed.rating || parsed.rate)) {
+    const r = parsed.rate_value || parsed.rating || parsed.rate;
+    if (!Number.isNaN(Number.parseFloat(r))) {
+      rateValue = Number.parseFloat(r);
+    }
+  }
+
+  if (!comments && (parsed.comments || parsed.comment || parsed.feedback || parsed.reason)) {
+    comments = parsed.comments || parsed.comment || parsed.feedback || parsed.reason;
+  }
+
+  if (rateValue !== null) {
+    return { rate_value: rateValue, comments: comments || null, raw: parsed };
+  }
+
+  return null;
+};
+
+// Helper to send Customer Satisfaction Flow Template (customer_satisfaction_ar: HX0827ed175724bb0ee0e81b0591bf92de)
+const sendCustomerSatisfactionFlow = async ({
+  fromWhatsApp,
+  toWhatsApp,
+  cleanPhone,
+  session,
+  ticketId,
+  userLang,
+  twiml,
+  res,
+  introMessage,
+  delayMs = process.env.NODE_ENV === 'test' ? 0 : Number.parseInt(process.env.RATING_FLOW_DELAY_MS || '3000', 10)
+}) => {
+  const flowSid = process.env.CUSTOMER_SATISFACTION_TEMPLATE_SID_AR || 'HX0827ed175724bb0ee0e81b0591bf92de';
+
+  sessionStates.set(cleanPhone, {
+    step: 'AWAITING_RATING',
+    ticketId,
+    lang: userLang
+  });
+
+  if (introMessage) {
+    twiml.message(introMessage);
+    await recordMessage(session.session_id, introMessage, 'SERVER', 'TEXT');
+  }
+
+  if (flowSid) {
+    if (delayMs > 0) {
+      console.log(`Scheduling Customer Satisfaction Flow Template dispatch in ${delayMs}ms...`);
+      res.type('text/xml');
+      res.send(twiml.toString());
+
+      setTimeout(async () => {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: flowSid
+          });
+          console.log(`Customer Satisfaction Flow Template sent after ${delayMs}ms timer. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[Customer Satisfaction Flow: ${flowSid}]`, 'SERVER', 'TEXT');
+        } catch (flowErr) {
+          console.error('Failed to send timed Customer Satisfaction Flow template:', flowErr.message);
+        }
+      }, delayMs);
+
+      return;
+    }
+
+    try {
+      const client = getTwilioClient();
+      const msgResult = await client.messages.create({
+        from: fromWhatsApp,
+        to: toWhatsApp,
+        contentSid: flowSid
+      });
+      console.log(`Customer Satisfaction Flow Template sent immediately. SID=${msgResult.sid}`);
+      await recordMessage(session.session_id, `[Customer Satisfaction Flow: ${flowSid}]`, 'SERVER', 'TEXT');
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    } catch (flowErr) {
+      console.error('Failed to send Customer Satisfaction Flow template, falling back to text rating prompt:', flowErr.message);
+    }
+  }
+
+  // Fallback to text rating prompt
+  const reply = introMessage
+    ? `${introMessage}\n\n${getTranslation(userLang, 'ratingPrompt')}`
+    : getTranslation(userLang, 'ratingPrompt');
+
+  await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+  twiml.message(reply);
+  res.type('text/xml');
+  return res.send(twiml.toString());
 };
 
 /**
@@ -351,10 +518,31 @@ exports.receiveWebhook = async (req, res, next) => {
       if (session.deletedAt || session.deleted_at) {
         await session.restore();
       }
-      if (session.status !== 'OPEN' || session.is_handover) {
+      // Reopen closed sessions and clear handover when user restarts a new session
+      if (session.status !== 'OPEN') {
         await session.update({ status: 'OPEN', is_handover: false });
       }
     }
+
+    // 2b. Auto-exit handover if user interacts with bot menu buttons/lists.
+    //     ButtonPayload/ListId signals the user chose from a bot-provided interactive menu,
+    //     meaning they want the bot — not a human agent — to handle their request.
+    const { ButtonPayload, ListId } = req.body;
+    if (session.is_handover === true && (ButtonPayload || ListId)) {
+      await session.update({ is_handover: false });
+      sessionStates.delete(cleanPhone);
+      console.log(`[HANDOVER] Session ${cleanPhone} auto-exited handover via bot button/list interaction.`);
+    }
+
+    // 2c. HANDOVER MODE: if a human agent has taken over this session, silently log the
+    //     incoming message and return without any bot reply, so the agent can reply manually.
+    if (session.is_handover === true) {
+      await recordMessage(session.session_id, incomingBody || '[media]', cleanPhone, 'TEXT');
+      console.log(`[HANDOVER] Session ${cleanPhone} is in handover mode — bot suppressed, message logged.`);
+      res.type('text/xml');
+      return res.send(twiml.toString()); // empty TwiML = no bot reply
+    }
+
 
     // 3. Process the stateful chatbot dialog and language detection
     let state = sessionStates.get(cleanPhone);
@@ -432,6 +620,77 @@ exports.receiveWebhook = async (req, res, next) => {
       await recordMessage(session.session_id, incomingBody, cleanPhone, 'TEXT');
     }
 
+    // Check for WhatsApp Flow submission callback (customer_satisfaction_ar)
+    const flowResult = parseFlowSubmission(req.body);
+    if (flowResult) {
+      console.log(`Received WhatsApp Flow rating submission: rate_value=${flowResult.rate_value}, comments=${flowResult.comments}`);
+
+      const activeTicketId = state?.ticketId || null;
+      const ratingId = 'rate_' + crypto.randomUUID();
+
+      await Rating.create({
+        rate_id: ratingId,
+        rate_value: flowResult.rate_value,
+        comments: flowResult.comments,
+        user_id: customer.member_id,
+        ticket_id: activeTicketId,
+        status: 'ACTIVE'
+      });
+
+      const reply = userLang === 'ar'
+        ? `شكراً لتعاملك معنا. تم تسجيل تقييمك بنجاح!`
+        : `Thank you for contacting us. Your rating has been recorded successfully!`;
+
+      sessionStates.delete(cleanPhone);
+      await session.update({ status: 'CLOSED' });
+
+      await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+      twiml.message(reply);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+
+    // AWAITING_SUPPORT_DEPARTMENT step
+    if (state?.step === 'AWAITING_SUPPORT_DEPARTMENT') {
+      const selection = (req.body.ListId || req.body.ButtonPayload || incomingBody).trim();
+      let departmentName = '';
+
+      if (selection === 'handoff_health' || selection === '1' || selection.includes('تأمين') || selection.includes('health')) {
+        departmentName = userLang === 'ar' ? 'قسم التأمين الصحي' : 'Health Insurance Department';
+      } else if (selection === 'handoff_retirement' || selection === '2' || selection.includes('تقاعد') || selection.includes('retirement')) {
+        departmentName = userLang === 'ar' ? 'قسم صندوق التقاعد' : 'Retirement Fund Department';
+      } else if (selection === 'handoff_general' || selection === '3' || selection.includes('أعضاء') || selection.includes('اعضاء') || selection.includes('member')) {
+        departmentName = userLang === 'ar' ? 'قسم خدمات الأعضاء' : 'Member Services Department';
+      } else {
+        departmentName = userLang === 'ar' ? 'قسم خدمة العملاء' : 'Customer Support Department';
+      }
+
+      await session.update({ is_handover: true, status: 'OPEN' });
+
+      const ticketId = 'tkt_' + crypto.randomUUID();
+      await Ticket.create({
+        ticket_id: ticketId,
+        ticket_priority: 'HIGH',
+        title: `Customer Support Handover Request - ${departmentName}`,
+        content: `[User Handover Request]\n[Department]: ${departmentName}\n[Phone]: ${cleanPhone}`,
+        ai_confedance: 1.0,
+        user_id: customer.member_id,
+        status: 'OPEN'
+      });
+
+      sessionStates.delete(cleanPhone);
+
+      const reply = userLang === 'ar'
+        ? `تم تحويل محادثتك فوراً للموظف المختص في (${departmentName}). سيقوم موظف خدمة العملاء بمساعدتك قريباً!`
+        : `Your chat has been instantly transferred to a specialized agent in (${departmentName}). An agent will assist you shortly!`;
+
+      await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
+      twiml.message(reply);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
     // Support keywords
     const supportKeywords = [
       'اريد التواصل مع خدمة العملاء',
@@ -439,13 +698,43 @@ exports.receiveWebhook = async (req, res, next) => {
       'تواصل',
       'دعم',
       'عملاء',
+      'شكاوي',
+      'شكوى',
+      'شكاوى',
       'human',
       'support',
+      'complaint',
+      'complaints',
       'chat with support'
     ];
 
-    // Trigger explicit customer support hotlines list
-    if (supportKeywords.includes(normalizedBody)) {
+    // Trigger customer support list picker template
+    const isSupportRequested = supportKeywords.some(kw => normalizedBody.includes(kw) || incomingBody.trim() === kw);
+    if (isSupportRequested) {
+      sessionStates.set(cleanPhone, { step: 'AWAITING_SUPPORT_DEPARTMENT', lang: userLang });
+
+      const supportTemplateSid = userLang === 'ar'
+        ? (process.env.SUPPORT_TEMPLATE_SID_AR || 'HX89288dad134a28816bbbe5509d1fd59e')
+        : (process.env.SUPPORT_TEMPLATE_SID_EN || 'HXa5821a44a80b00d7d722871c3f266bfe');
+
+      if (supportTemplateSid) {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: supportTemplateSid
+          });
+          console.log(`Support Menu List Picker Template sent. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[Support List Picker Template: ${supportTemplateSid}]`, 'SERVER', 'TEXT');
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } catch (templateErr) {
+          console.error('Failed to send Support List Picker template, falling back to plain text:', templateErr.message);
+        }
+      }
+
+      // Plain text fallback
       const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
       const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}: ${c.contact_number || '+962 6 500 0000'}`).join('\n');
       
@@ -453,8 +742,6 @@ exports.receiveWebhook = async (req, res, next) => {
         ? `يرجى التواصل مباشرة مع الأقسام الإدارية عبر الأرقام التالية:\n${categoryList}`
         : `Please contact the administrative departments directly using the following numbers:\n${categoryList}`;
 
-      sessionStates.delete(cleanPhone);
-      await session.update({ status: 'CLOSED' });
       await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
 
       twiml.message(responseText);
@@ -647,29 +934,629 @@ exports.receiveWebhook = async (req, res, next) => {
         }
       }
 
+      // For the Membership Services category — send Membership Services Quick Reply template
+      const isMembershipCategory = selectedCategory.service_id === 'membership'
+        || selectedCategory.service_id === 'membership_services'
+        || selectedCategory.service_name.includes('عضوية')
+        || selectedCategory.service_name.toLowerCase().includes('membership');
 
-      // Plain text fallback for other categories
+      if (isMembershipCategory) {
+        const membershipSid = userLang === 'ar'
+          ? (process.env.MEMBERSHIP_SERVICES_TEMPLATE_SID_AR || 'HXbd68f7b925e56759719c287e1c999f55')
+          : process.env.MEMBERSHIP_SERVICES_TEMPLATE_SID_EN;
 
-      const serviceList = filteredServices.map((s, i) => `${i + 1}. Request service: ${s.id}`).join('\n');
-      const responseText = getTranslation(userLang, 'selectServicePrompt', { category: selectedCategory.service_name, list: serviceList });
+        if (membershipSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: membershipSid
+            });
+            console.log(`Membership Services Quick Reply Template sent. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[Quick Reply Template: ${membershipSid}]`, 'SERVER', 'TEXT');
 
+            sessionStates.set(cleanPhone, {
+              step: 'AWAITING_SERVICE',
+              services: filteredServices,
+              selectedCategory,
+              lang: userLang
+            });
+
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (templateErr) {
+            console.error('Failed to send Membership Services Quick Reply template, falling back to plain text:', templateErr.message);
+          }
+        }
+
+        // Plain text fallback for other categories
+        const serviceList = filteredServices.map((s, i) => `${i + 1}. Request service: ${s.id}`).join('\n');
+        const responseText = getTranslation(userLang, 'selectServicePrompt', { category: selectedCategory.service_name, list: serviceList });
+
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_SERVICE',
+          services: filteredServices,
+          selectedCategory,
+          lang: userLang
+        });
+        await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
+
+        twiml.message(responseText);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+    }
+
+    // AWAITING_DELIVERY_PREFERENCE step
+    if (state?.step === 'AWAITING_DELIVERY_PREFERENCE') {
+      const selection = (req.body.ButtonPayload || incomingBody).trim();
+
+      if (selection === 'delivery_no' || selection === '2' || selection.includes('لا أرغب') || selection.includes('no')) {
+        const memberId = state.memberId || customer.member_id;
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        const paymentUrl = `${protocol}://${host}/payment?phone=${encodeURIComponent(cleanPhone)}&memberId=${encodeURIComponent(memberId)}&amount=5.00&address=${encodeURIComponent('نسخة إلكترونية - عبر البريد والإشعار')}`;
+
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_PAYMENT',
+          service: 'issue_certificate',
+          memberId,
+          targetPhone: cleanPhone,
+          paymentUrl,
+          amount: '5.00',
+          lang: userLang
+        });
+
+        const payPrompt = userLang === 'ar'
+          ? `📜 *خطوة الدفع الإلكتروني (شهادة عضوية إلكترونية)*\n━━━━━━━━━━━━━━━━━━━━\nتم تجهيز طلب شهادة العضوية الإلكترونية (رقم ${memberId}). يرجى استكمال عملية الدفع (5.00 د.أ) عبر الرابط التالي 📍:\n${paymentUrl}`
+          : `📜 *Electronic Payment Step (Electronic Certificate)*\n━━━━━━━━━━━━━━━━━━━━\nYour electronic membership certificate (#${memberId}) request is ready. Please finalize your payment (5.00 JOD) using the following link 📍:\n${paymentUrl}`;
+
+        await recordMessage(session.session_id, payPrompt, 'SERVER', 'TEXT');
+        twiml.message(payPrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      if (selection === 'delivery_yes' || selection === '1' || selection.includes('أرغب') || selection.includes('yes')) {
+        // Dispatch cert_receiver_info_ar_jea Quick Reply template asking: "يرجى تحديد مستلم الشهادة:"
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_RECEIVER_SELECTION',
+          service: 'issue_certificate',
+          memberId: state.memberId,
+          lang: userLang
+        });
+
+        const receiverInfoSid = userLang === 'ar'
+          ? (process.env.CERT_RECEIVER_INFO_TEMPLATE_SID_AR || 'HXbaf3f234788c5e7e51f3c1f671450aa8')
+          : process.env.CERT_RECEIVER_INFO_TEMPLATE_SID_EN;
+
+        if (receiverInfoSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: receiverInfoSid
+            });
+            console.log(`Certificate Receiver Info Template sent. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[Quick Reply Template: ${receiverInfoSid}]`, 'SERVER', 'TEXT');
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (templateErr) {
+            console.error('Failed to send Certificate Receiver Info template, falling back to plain text:', templateErr.message);
+          }
+        }
+
+        // Plain text fallback
+        const receiverPrompt = userLang === 'ar'
+          ? `يرجى تحديد مستلم الشهادة:\n1. المهندس نفسه (receiver_self)\n2. شخص آخر (receiver_other)`
+          : `Please specify the receiver of the certificate:\n1. Engineer himself (receiver_self)\n2. Another person (receiver_other)`;
+
+        await recordMessage(session.session_id, receiverPrompt, 'SERVER', 'TEXT');
+        twiml.message(receiverPrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+    }
+
+    // AWAITING_RECEIVER_SELECTION step
+    if (state?.step === 'AWAITING_RECEIVER_SELECTION') {
+      const selection = (req.body.ButtonPayload || incomingBody).trim();
+      const memberId = state.memberId || customer.member_id;
+
+      const isSelf = selection === 'receiver_self' || selection === '1' || selection.includes('المهندس نفسه') || selection.includes('self');
+
+      if (isSelf) {
+        const targetPhone = customer?.phone || cleanPhone;
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_DELIVERY_ADDRESS',
+          service: 'issue_certificate',
+          memberId,
+          receiverType: 'Engineer Himself',
+          targetPhone,
+          lang: userLang
+        });
+
+        const addressTemplateSid = userLang === 'ar'
+          ? (process.env.ADDRESS_TEMPLATE_SID_AR || 'HX43bf47e5343fa31bed8c769e3361284f')
+          : (process.env.ADDRESS_TEMPLATE_SID_EN || 'HX9e8b1fe91746f2084f3ae1be18698832');
+
+        if (addressTemplateSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: addressTemplateSid
+            });
+            console.log(`Address Text Template sent for engineer. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[Address Template: ${addressTemplateSid}]`, 'SERVER', 'TEXT');
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (templateErr) {
+            console.error('Failed to send Address template for engineer:', templateErr.message);
+          }
+        }
+
+        const addressPrompt = userLang === 'ar'
+          ? `ممتاز! أخيراً، يرجى كتابة عنوان المستلم بالتفصيل 📍 (المدينة، المنطقة، الشارع، رقم البناية):`
+          : `Great! Finally, please provide the detailed address of the receiver 📍 (City, Area, Street, Building Number):`;
+
+        await recordMessage(session.session_id, addressPrompt, 'SERVER', 'TEXT');
+        twiml.message(addressPrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      } else {
+        // receiver_other: Prompt for other receiver phone number using phone_jea_ar template
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_RECEIVER_PHONE',
+          service: 'issue_certificate',
+          memberId,
+          receiverType: 'Other Receiver',
+          lang: userLang
+        });
+
+        const phoneTemplateSid = userLang === 'ar'
+          ? (process.env.PHONE_REQUEST_TEMPLATE_SID_AR || 'HXb8e3c368aaccc5fd50fa51a588b97ec7')
+          : (process.env.PHONE_REQUEST_TEMPLATE_SID_EN || 'HX4138986d24eb743ebf8b8967e532363b');
+
+        if (phoneTemplateSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: phoneTemplateSid
+            });
+            console.log(`Phone Request Text Template sent for other receiver. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[Phone Request Template: ${phoneTemplateSid}]`, 'SERVER', 'TEXT');
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (templateErr) {
+            console.error('Failed to send Phone Request template for other receiver:', templateErr.message);
+          }
+        }
+
+        const phonePrompt = userLang === 'ar'
+          ? `شكراً لك. يرجى إدخال رقم هاتف المستلم للتواصل معه عند التوصيل 📱`
+          : `Thank you. Please enter the phone number of the receiver for delivery contact 📱`;
+
+        await recordMessage(session.session_id, phonePrompt, 'SERVER', 'TEXT');
+        twiml.message(phonePrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+    }
+
+    // AWAITING_PHONE_ERROR_CHOICE step
+    if (state?.step === 'AWAITING_PHONE_ERROR_CHOICE') {
+      const choice = incomingBody.trim().toLowerCase();
+
+      if (choice === '1' || choice.includes('إعادة') || choice.includes('اعادة') || choice.includes('retry')) {
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_RECEIVER_PHONE',
+          service: 'issue_certificate',
+          memberId: state.memberId,
+          lang: userLang
+        });
+
+        const phoneTemplateSid = userLang === 'ar'
+          ? (process.env.PHONE_REQUEST_TEMPLATE_SID_AR || 'HXb8e3c368aaccc5fd50fa51a588b97ec7')
+          : (process.env.PHONE_REQUEST_TEMPLATE_SID_EN || 'HX4138986d24eb743ebf8b8967e532363b');
+
+        if (phoneTemplateSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: phoneTemplateSid
+            });
+            console.log(`Phone Request Text Template sent on retry. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[Phone Request Template: ${phoneTemplateSid}]`, 'SERVER', 'TEXT');
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (templateErr) {
+            console.error('Failed to send Phone Request template on retry:', templateErr.message);
+          }
+        }
+
+        const phonePrompt = userLang === 'ar'
+          ? `يرجى إدخال رقم هاتف محلي أردني صحيح (مثل: 0791234567 أو +962791234567) 📱`
+          : `Please enter a valid Jordanian phone number (e.g. 0791234567 or +962791234567) 📱`;
+
+        await recordMessage(session.session_id, phonePrompt, 'SERVER', 'TEXT');
+        twiml.message(phonePrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      if (choice === '2' || choice.includes('رئيسية') || choice.includes('رئيسيه') || choice.includes('main')) {
+        sessionStates.delete(cleanPhone);
+        const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
+        const greetingSid = userLang === 'ar'
+          ? process.env.GREETING_TEMPLATE_SID_AR
+          : process.env.GREETING_TEMPLATE_SID_EN;
+
+        if (greetingSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: greetingSid
+            });
+            console.log(`Greeting template sent after main menu choice. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[List Picker Template: ${greetingSid}]`, 'SERVER', 'TEXT');
+            sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (err) {
+            console.error('Failed to send greeting template:', err.message);
+          }
+        }
+
+        const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}`).join('\n');
+        const welcomeText = getTranslation(userLang, 'welcomePrompt', { name: displayName, list: categoryList });
+        sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+        await recordMessage(session.session_id, welcomeText, 'SERVER', 'TEXT');
+        twiml.message(welcomeText);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      // Invalid choice fallback prompt
+      const invalidOptionMsg = userLang === 'ar'
+        ? `❌ خيار غير صحيح. يرجى الاختيار:\n1. إعادة محاولة إدخال رقم الهاتف 📱\n2. العودة للقائمة الرئيسية 🏠`
+        : `❌ Invalid option. Please choose:\n1. Retry entering phone number 📱\n2. Return to Main Menu 🏠`;
+
+      await recordMessage(session.session_id, invalidOptionMsg, 'SERVER', 'TEXT');
+      twiml.message(invalidOptionMsg);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+    // AWAITING_RECEIVER_PHONE step
+    if (state?.step === 'AWAITING_RECEIVER_PHONE') {
+      const phoneInput = incomingBody.trim();
+      const isValidJordanianPhone = /^(?:\+?962|00962|0)?7[789]\d{7}$/.test(phoneInput.replace(/\s+/g, ''));
+      const memberId = state.memberId || customer.member_id;
+
+      let existingCustomer = null;
+      if (isValidJordanianPhone) {
+        const normalized = normalizePhone(phoneInput);
+        const rawWithoutPlus = normalized.replace('+', '');
+        existingCustomer = await Customer.findOne({
+          where: {
+            [Op.or]: [
+              { phone: phoneInput },
+              { phone: normalized },
+              { phone: rawWithoutPlus }
+            ]
+          }
+        });
+      }
+
+      if (!isValidJordanianPhone || !existingCustomer) {
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_PHONE_ERROR_CHOICE',
+          service: 'issue_certificate',
+          memberId,
+          lang: userLang
+        });
+
+        const errorPrompt = userLang === 'ar'
+          ? `❌ رقم الهاتف غير صحيح أو غير مسجل بالنظام.\n\nيرجى الاختيار:\n1. إعادة محاولة إدخال رقم الهاتف 📱\n2. العودة للقائمة الرئيسية 🏠`
+          : `❌ Invalid phone number or not registered in the system.\n\nPlease choose:\n1. Retry entering phone number 📱\n2. Return to Main Menu 🏠`;
+
+        await recordMessage(session.session_id, errorPrompt, 'SERVER', 'TEXT');
+        twiml.message(errorPrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      // Valid phone -> Transition to AWAITING_DELIVERY_ADDRESS and send address template
       sessionStates.set(cleanPhone, {
-        step: 'AWAITING_SERVICE',
-        services: filteredServices,
-        selectedCategory,
+        step: 'AWAITING_DELIVERY_ADDRESS',
+        service: 'issue_certificate',
+        memberId,
+        receiverType: 'Other Receiver',
+        targetPhone: phoneInput,
         lang: userLang
       });
-      await recordMessage(session.session_id, responseText, 'SERVER', 'TEXT');
 
-      twiml.message(responseText);
+      const addressTemplateSid = userLang === 'ar'
+        ? (process.env.ADDRESS_TEMPLATE_SID_AR || 'HX43bf47e5343fa31bed8c769e3361284f')
+        : (process.env.ADDRESS_TEMPLATE_SID_EN || 'HX9e8b1fe91746f2084f3ae1be18698832');
+
+      if (addressTemplateSid) {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: addressTemplateSid
+          });
+          console.log(`Address Text Template sent after phone input. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[Address Template: ${addressTemplateSid}]`, 'SERVER', 'TEXT');
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } catch (templateErr) {
+          console.error('Failed to send Address template after phone input:', templateErr.message);
+        }
+      }
+
+      const addressPrompt = userLang === 'ar'
+        ? `ممتاز! أخيراً، يرجى كتابة عنوان المستلم بالتفصيل 📍 (المدينة، المنطقة، الشارع، رقم البناية):`
+        : `Great! Finally, please provide the detailed address of the receiver 📍 (City, Area, Street, Building Number):`;
+
+      await recordMessage(session.session_id, addressPrompt, 'SERVER', 'TEXT');
+      twiml.message(addressPrompt);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+    // AWAITING_DELIVERY_ADDRESS step
+    if (state?.step === 'AWAITING_DELIVERY_ADDRESS') {
+      const addressInput = incomingBody.trim();
+      const memberId = state.memberId || customer.member_id;
+      const targetPhone = state.targetPhone || customer.phone || cleanPhone;
+      const receiverType = state.receiverType || 'Engineer Himself';
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const paymentUrl = `${protocol}://${host}/payment?phone=${encodeURIComponent(targetPhone)}&memberId=${encodeURIComponent(memberId)}&amount=15.00&address=${encodeURIComponent(addressInput)}`;
+
+      sessionStates.set(cleanPhone, {
+        step: 'AWAITING_PAYMENT',
+        service: 'issue_certificate',
+        memberId,
+        targetPhone,
+        receiverType,
+        addressInput,
+        paymentUrl,
+        lang: userLang
+      });
+
+      const payPrompt = userLang === 'ar'
+        ? `💳 *خطوة الدفع الإلكتروني*\n━━━━━━━━━━━━━━━━━━━━\nشكراً لك! لإتمام طلب إصدار وتوصيل شهادة العضوية الورقية، يرجى استكمال عملية الدفع (15.00 د.أ) عبر الرابط التالي 📍:\n${paymentUrl}`
+        : `💳 *Electronic Payment Step*\n━━━━━━━━━━━━━━━━━━━━\nThank you! To complete your membership certificate physical delivery order, please finalize your payment (15.00 JOD) using the following link 📍:\n${paymentUrl}`;
+
+      await recordMessage(session.session_id, payPrompt, 'SERVER', 'TEXT');
+      twiml.message(payPrompt);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+    // AWAITING_ENGINEER_NUMBER step
+    if (state?.step === 'AWAITING_ENGINEER_NUMBER') {
+      const rawInput = incomingBody.trim();
+      const engNumberInput = parseArabicDigits(rawInput).replace(/\D/g, '');
+      const isValidFormat = /^\d{6}$/.test(engNumberInput);
+
+      let existingCustomer = null;
+      if (isValidFormat) {
+        existingCustomer = await Customer.findOne({
+          where: { member_id: engNumberInput }
+        });
+        if (!existingCustomer && customer) {
+          existingCustomer = customer;
+        }
+      }
+
+      if (!isValidFormat || !existingCustomer) {
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_MEMBER_NUM_ERROR_CHOICE',
+          service: 'issue_certificate',
+          lang: userLang
+        });
+
+        const errorPrompt = userLang === 'ar'
+          ? `❌ رقم العضوية غير صحيح أو غير مسجل.\n\nيرجى الاختيار:\n1. إعادة محاولة إدخال رقم العضوية (6 أرقام) 🔢\n2. العودة للقائمة الرئيسية 🏠`
+          : `❌ Invalid membership number or not registered.\n\nPlease choose:\n1. Retry entering membership number (6 digits) 🔢\n2. Return to Main Menu 🏠`;
+
+        await recordMessage(session.session_id, errorPrompt, 'SERVER', 'TEXT');
+        twiml.message(errorPrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      // Save memberId and dispatch Delivery Preference Quick Reply template
+      sessionStates.set(cleanPhone, {
+        step: 'AWAITING_DELIVERY_PREFERENCE',
+        service: 'issue_certificate',
+        memberId: engNumberInput,
+        lang: userLang
+      });
+
+      const preferenceTemplateSid = userLang === 'ar'
+        ? (process.env.CERT_DELIVERY_PREFERENCE_TEMPLATE_SID_AR || 'HX27c980acc261b098fcbea5f24ac7f841')
+        : process.env.CERT_DELIVERY_PREFERENCE_TEMPLATE_SID_EN;
+
+      if (preferenceTemplateSid) {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: preferenceTemplateSid
+          });
+          console.log(`Certificate Delivery Preference Template sent after member number validation. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[Quick Reply Template: ${preferenceTemplateSid}]`, 'SERVER', 'TEXT');
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } catch (templateErr) {
+          console.error('Failed to send Certificate Delivery Preference template, falling back to plain text:', templateErr.message);
+        }
+      }
+
+      // Plain text fallback
+      const prefPrompt = userLang === 'ar'
+        ? `هل ترغب بتوصيل الشهادة الورقية؟\n1. أرغب في التوصيل (delivery_yes)\n2. لا أرغب في التوصيل (delivery_no)`
+        : `Would you like physical delivery of the certificate?\n1. Yes, I want delivery (delivery_yes)\n2. No, I do not want delivery (delivery_no)`;
+
+      await recordMessage(session.session_id, prefPrompt, 'SERVER', 'TEXT');
+      twiml.message(prefPrompt);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+    // AWAITING_MEMBER_NUM_ERROR_CHOICE step
+    if (state?.step === 'AWAITING_MEMBER_NUM_ERROR_CHOICE') {
+      const choice = incomingBody.trim().toLowerCase();
+
+      if (choice === '1' || choice.includes('إعادة') || choice.includes('اعادة') || choice.includes('retry')) {
+        sessionStates.set(cleanPhone, {
+          step: 'AWAITING_ENGINEER_NUMBER',
+          service: 'issue_certificate',
+          lang: userLang
+        });
+
+        const engNumberTemplateSid = userLang === 'ar'
+          ? (process.env.CERT_REQUEST_ENG_NUMBER_TEMPLATE_SID_AR || 'HXe92a8ba024c28960a5e45474dbef26ca')
+          : process.env.CERT_REQUEST_ENG_NUMBER_TEMPLATE_SID_EN;
+
+        if (engNumberTemplateSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: engNumberTemplateSid
+            });
+            console.log(`Engineer Member Number Text Template sent on retry. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[Text Template: ${engNumberTemplateSid}]`, 'SERVER', 'TEXT');
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (templateErr) {
+            console.error('Failed to send Engineer Member Number template on retry:', templateErr.message);
+          }
+        }
+
+        const engPrompt = userLang === 'ar'
+          ? `يرجى إدخال رقم العضوية النقابي الخاص بك (6 أرقام):`
+          : `Please enter your 6-digit syndicate membership number:`;
+
+        await recordMessage(session.session_id, engPrompt, 'SERVER', 'TEXT');
+        twiml.message(engPrompt);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      if (choice === '2' || choice.includes('رئيسية') || choice.includes('رئيسيه') || choice.includes('main')) {
+        sessionStates.delete(cleanPhone);
+        const categories = await ServiceCategory.findAll({ where: { status: 'ACTIVE' } });
+        const greetingSid = userLang === 'ar'
+          ? process.env.GREETING_TEMPLATE_SID_AR
+          : process.env.GREETING_TEMPLATE_SID_EN;
+
+        if (greetingSid) {
+          try {
+            const client = getTwilioClient();
+            const msgResult = await client.messages.create({
+              from: fromWhatsApp,
+              to: toWhatsApp,
+              contentSid: greetingSid
+            });
+            console.log(`Greeting template sent after main menu choice. SID=${msgResult.sid}`);
+            await recordMessage(session.session_id, `[List Picker Template: ${greetingSid}]`, 'SERVER', 'TEXT');
+            sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+            res.type('text/xml');
+            return res.send(twiml.toString());
+          } catch (err) {
+            console.error('Failed to send greeting template:', err.message);
+          }
+        }
+
+        const categoryList = categories.map((c, i) => `${i + 1}. ${c.service_name}`).join('\n');
+        const welcomeText = getTranslation(userLang, 'welcomePrompt', { name: displayName, list: categoryList });
+        sessionStates.set(cleanPhone, { step: 'AWAITING_CATEGORY', categories, lang: userLang });
+        await recordMessage(session.session_id, welcomeText, 'SERVER', 'TEXT');
+        twiml.message(welcomeText);
+        res.type('text/xml');
+        return res.send(twiml.toString());
+      }
+
+      // Invalid choice fallback prompt
+      const invalidOptionMsg = userLang === 'ar'
+        ? `❌ خيار غير صحيح. يرجى الاختيار:\n1. إعادة محاولة إدخال رقم العضوية 🔢\n2. العودة للقائمة الرئيسية 🏠`
+        : `❌ Invalid option. Please choose:\n1. Retry entering membership number 🔢\n2. Return to Main Menu 🏠`;
+
+      await recordMessage(session.session_id, invalidOptionMsg, 'SERVER', 'TEXT');
+      twiml.message(invalidOptionMsg);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+    // Global Quick Reply button action check for issue_certificate
+    const trimmedBody = incomingBody.trim();
+    const isCertificateRequested = trimmedBody === 'issue_certificate'
+      || trimmedBody === 'إصدار شهادة عضوية'
+      || trimmedBody === 'Issue Membership Certificate'
+      || req.body.ButtonPayload === 'issue_certificate';
+
+    if (isCertificateRequested) {
+      sessionStates.set(cleanPhone, {
+        step: 'AWAITING_ENGINEER_NUMBER',
+        service: 'issue_certificate',
+        lang: userLang
+      });
+
+      const engNumberTemplateSid = userLang === 'ar'
+        ? (process.env.CERT_REQUEST_ENG_NUMBER_TEMPLATE_SID_AR || 'HXe92a8ba024c28960a5e45474dbef26ca')
+        : process.env.CERT_REQUEST_ENG_NUMBER_TEMPLATE_SID_EN;
+
+      if (engNumberTemplateSid) {
+        try {
+          const client = getTwilioClient();
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: engNumberTemplateSid
+          });
+          console.log(`Engineer Member Number Text Template sent. SID=${msgResult.sid}`);
+          await recordMessage(session.session_id, `[Text Template: ${engNumberTemplateSid}]`, 'SERVER', 'TEXT');
+          res.type('text/xml');
+          return res.send(twiml.toString());
+        } catch (templateErr) {
+          console.error('Failed to send Engineer Member Number template, falling back to plain text:', templateErr.message);
+        }
+      }
+
+      // Plain text fallback
+      const engPrompt = userLang === 'ar'
+        ? `يرجى إدخال رقم العضوية النقابي الخاص بك (6 أرقام):`
+        : `Please enter your 6-digit syndicate membership number:`;
+
+      await recordMessage(session.session_id, engPrompt, 'SERVER', 'TEXT');
+      twiml.message(engPrompt);
       res.type('text/xml');
       return res.send(twiml.toString());
     }
 
     // AWAITING_SERVICE step
     if (state?.step === 'AWAITING_SERVICE') {
-      const trimmedBody = incomingBody.trim();
-
       // Handle "Main Menu" button reply — go back to greeting
       if (trimmedBody === 'main_menu' || trimmedBody === 'القائمة الرئيسية' || trimmedBody === 'Main Menu') {
         sessionStates.delete(cleanPhone);
@@ -777,11 +1664,17 @@ exports.receiveWebhook = async (req, res, next) => {
               }
             });
 
-            sessionStates.delete(cleanPhone);
-            await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
-            twiml.message(reply);
-            res.type('text/xml');
-            return res.send(twiml.toString());
+            return sendCustomerSatisfactionFlow({
+              fromWhatsApp,
+              toWhatsApp,
+              cleanPhone,
+              session,
+              ticketId: null,
+              userLang,
+              twiml,
+              res,
+              introMessage: reply
+            });
           } else {
             const noDataReply = userLang === 'ar'
               ? '⚠️ لم يتم العثور على بطاقات تأمين صحي مرتبطة بحسابك. يرجى التواصل مع النقابة للمساعدة.'
@@ -877,18 +1770,16 @@ exports.receiveWebhook = async (req, res, next) => {
           status: 'OPEN'
         });
 
-        sessionStates.set(cleanPhone, {
-          step: 'AWAITING_RATING',
+        return sendCustomerSatisfactionFlow({
+          fromWhatsApp,
+          toWhatsApp,
+          cleanPhone,
+          session,
           ticketId,
-          lang: userLang
+          userLang,
+          twiml,
+          res
         });
-
-        const reply = getTranslation(userLang, 'ratingPrompt');
-        await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
-
-        twiml.message(reply);
-        res.type('text/xml');
-        return res.send(twiml.toString());
       } else {
         sessionStates.delete(cleanPhone);
         await session.update({ status: 'CLOSED' });
@@ -926,18 +1817,16 @@ exports.receiveWebhook = async (req, res, next) => {
           status: 'OPEN'
         });
 
-        sessionStates.set(cleanPhone, {
-          step: 'AWAITING_RATING',
+        return sendCustomerSatisfactionFlow({
+          fromWhatsApp,
+          toWhatsApp,
+          cleanPhone,
+          session,
           ticketId,
-          lang: userLang
+          userLang,
+          twiml,
+          res
         });
-
-        const reply = getTranslation(userLang, 'ratingPrompt');
-        await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
-
-        twiml.message(reply);
-        res.type('text/xml');
-        return res.send(twiml.toString());
       } else {
         const reply = getTranslation(userLang, 'requestFailed');
         await recordMessage(session.session_id, reply, 'SERVER', 'TEXT');
@@ -999,20 +1888,21 @@ exports.receiveWebhook = async (req, res, next) => {
             status: 'OPEN'
           });
 
-          sessionStates.set(cleanPhone, {
-            step: 'AWAITING_RATING',
+          const introMsg = userLang === 'ar'
+            ? `شكراً لك! تم تسجيل طلبك بنجاح وفتح تذكرة دعم برقم (${ticketId}) لمتابعة استفسارك مع القسم المختص.`
+            : `Thank you! Your request has been successfully registered and a support ticket (${ticketId}) has been opened to follow up with our team.`;
+
+          return sendCustomerSatisfactionFlow({
+            fromWhatsApp,
+            toWhatsApp,
+            cleanPhone,
+            session,
             ticketId,
-            lang: userLang
+            userLang,
+            twiml,
+            res,
+            introMessage: introMsg
           });
-
-          const successText = userLang === 'ar'
-            ? `شكراً لك! تم تسجيل طلبك بنجاح وفتح تذكرة دعم برقم (${ticketId}) لمتابعة استفسارك مع القسم المختص.\n\nيرجى تقييم جودة الخدمة من 1 إلى 5 درجات:`
-            : `Thank you! Your request has been successfully registered and a support ticket (${ticketId}) has been opened to follow up with our team.\n\nPlease rate our service quality from 1 to 5 stars:`;
-
-          await recordMessage(session.session_id, successText, 'SERVER', 'TEXT');
-          twiml.message(successText);
-          res.type('text/xml');
-          return res.send(twiml.toString());
         } else {
           // Case 3: General query/trivia -> Simply answer "I don't know / couldn't find answer"
           sessionStates.delete(cleanPhone);
@@ -1082,5 +1972,204 @@ exports.receiveWebhook = async (req, res, next) => {
       console.error('Failed to send error message response:', innerErr);
       next(err);
     }
+  }
+};
+
+exports.sessionStates = sessionStates;
+
+/**
+ * Handle Payment Submission from Web Portal (payment.html)
+ * POST /api/whatsapp/payment/submit
+ */
+exports.submitPayment = async (req, res, next) => {
+  try {
+    const { cleanPhone, memberId, amount, paymentMethod, transactionRef, address, status, failureReason } = req.body;
+
+    if (!cleanPhone || !memberId) {
+      return res.status(400).json({ success: false, message: 'Missing required fields: cleanPhone and memberId' });
+    }
+
+    const rawDigits = cleanPhone.replace(/\D/g, '');
+    const formattedPhone = '+' + (rawDigits.startsWith('962') ? rawDigits : ('962' + rawDigits.replace(/^0+/, '')));
+    const toWhatsApp = `whatsapp:${formattedPhone}`;
+    const fromWhatsApp = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+
+    const isFailed = status === 'failed' || req.body.success === false;
+
+    if (isFailed) {
+      const activeState = sessionStates.get(formattedPhone.replace('+', '')) || sessionStates.get(rawDigits) || {};
+      const savedUrl = activeState.paymentUrl || `https://jpa-demo.eqratech.com/payment?phone=${encodeURIComponent(cleanPhone)}&memberId=${encodeURIComponent(memberId)}&amount=${amount || '15.00'}`;
+
+      sessionStates.set(formattedPhone.replace('+', ''), {
+        step: 'AWAITING_PAYMENT_FAILED_CHOICE',
+        memberId,
+        targetPhone: formattedPhone,
+        paymentUrl: savedUrl,
+        amount: amount || '15.00',
+        lang: 'ar'
+      });
+      sessionStates.set(rawDigits, sessionStates.get(formattedPhone.replace('+', '')));
+
+      const failMsg = `❌ *تعذرت عملية الدفع الإلكتروني*\n━━━━━━━━━━━━━━━━━━━━\nعذراً، لم نتمكن من استكمال عملية الدفع لشهادة العضوية (${failureReason || 'البطاقة مرفوضة من قبل البنك'}).\n\nيرجى تحديد الخيار المناسب:\n1. 💳 إعادة محاولة الدفع الإلكتروني\n2. 🏠 العودة للقائمة الرئيسية`;
+
+      const client = getTwilioClient();
+      if (client) {
+        try {
+          await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            body: failMsg
+          });
+          console.log(`Payment failure message dispatched to ${toWhatsApp}`);
+        } catch (fErr) {
+          console.error('Failed to send WhatsApp payment failure message:', fErr.message);
+        }
+      }
+
+      return res.status(200).json({
+        success: false,
+        message: 'Payment failure recorded and options dispatched to WhatsApp',
+        transactionRef
+      });
+    }
+
+    let customerRecord = await Customer.findOne({ where: { member_id: memberId } });
+    if (!customerRecord) {
+      customerRecord = await Customer.findOne({ where: { phone: formattedPhone } });
+    }
+    if (!customerRecord) {
+      customerRecord = await Customer.create({
+        member_id: memberId,
+        phone: formattedPhone,
+        role: 'ENGINEER'
+      });
+    }
+
+    const ticketId = 'tkt_' + crypto.randomUUID();
+    await Ticket.create({
+      ticket_id: ticketId,
+      ticket_priority: 'MEDIUM',
+      title: `Membership Certificate Order - Payment Received (${paymentMethod || 'Online'})`,
+      content: `[Membership Certificate Payment Confirmed]\nMember ID: ${memberId}\nPhone: ${formattedPhone}\nAmount: ${amount || '15.00'} JOD\nPayment Method: ${paymentMethod || 'Online'}\nTransaction Ref: ${transactionRef || 'N/A'}\nDelivery Address: ${address || 'N/A'}`,
+      ai_confedance: 1.0,
+      user_id: customerRecord.member_id,
+      status: 'OPEN'
+    });
+
+    const confirmMsg = `💳 *إيصال وتأكيد عملية الدفع*\n━━━━━━━━━━━━━━━━━━━━\nتم استلام مبلغ (${amount || '15.00'} د.أ) بنجاح لشهادة العضوية برقم (${memberId}) عبر ${paymentMethod || 'الدفع الإلكتروني'}.\n🔢 رقم العملية: ${transactionRef || 'N/A'}\n📱 رقم الهاتف: ${formattedPhone}\n📍 عنوان التوصيل: ${address || 'N/A'}\n\nشكراً لك! تم تسجيل طلبك وإحالتك إلى قسم التجهيز والتوصيل.`;
+
+    const client = getTwilioClient();
+    if (client) {
+      try {
+        await client.messages.create({
+          from: fromWhatsApp,
+          to: toWhatsApp,
+          body: confirmMsg
+        });
+        console.log(`Payment WhatsApp Receipt sent to ${toWhatsApp}`);
+      } catch (tErr) {
+        console.error('Failed to send WhatsApp payment receipt message:', tErr.message);
+      }
+    }
+
+    sessionStates.set(formattedPhone.replace('+', ''), {
+      step: 'AWAITING_RATING',
+      ticketId,
+      lang: 'ar'
+    });
+
+    const flowSid = process.env.CUSTOMER_SATISFACTION_TEMPLATE_SID_AR || 'HX0827ed175724bb0ee0e81b0591bf92de';
+    const delayMs = process.env.NODE_ENV === 'test' ? 0 : 3000;
+
+    if (client && flowSid) {
+      setTimeout(async () => {
+        try {
+          const msgResult = await client.messages.create({
+            from: fromWhatsApp,
+            to: toWhatsApp,
+            contentSid: flowSid
+          });
+          console.log(`Rating Flow Template sent after payment completion. SID=${msgResult.sid}`);
+        } catch (fErr) {
+          console.error('Failed to send Rating Flow after payment:', fErr.message);
+        }
+      }, delayMs);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Payment recorded and rating flow dispatched successfully',
+      ticketId,
+      transactionRef
+    });
+  } catch (err) {
+    console.error('submitPayment error:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Queued WhatsApp Webhook Entry Point
+ * POST /api/whatsapp/webhook
+ *
+ * In NODE_ENV=test: calls receiveWebhook directly (synchronous) so tests get
+ * real TwiML responses and assertions work normally.
+ *
+ * In production: returns 200 to Twilio immediately (<5ms) then processes the
+ * message asynchronously via WebhookQueue to avoid Twilio's 15-second timeout.
+ */
+exports.receiveWebhookQueued = async (req, res, next) => {
+  // ── TEST MODE: bypass queue for synchronous test assertions ────────────────
+  if (process.env.NODE_ENV === 'test') {
+    return exports.receiveWebhook(req, res, next);
+  }
+
+  try {
+    const { From, MessageStatus, SmsStatus, MessageSid } = req.body;
+
+    // Status callbacks → pass through immediately, no queue needed
+    if (MessageStatus || (SmsStatus && SmsStatus !== 'received')) {
+      console.log(`[Queue] Status callback: SID=${MessageSid}, Status=${SmsStatus || MessageStatus}`);
+      return res.sendStatus(200);
+    }
+
+    if (!From) {
+      return res.status(400).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+    }
+
+    const cleanPhone = From.replace('whatsapp:', '').trim();
+
+    // Inject host so queue worker can reconstruct public URLs
+    const body = {
+      ...req.body,
+      _host: req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3000',
+      _proto: req.headers['x-forwarded-proto'] || req.protocol || 'http'
+    };
+
+    // Enqueue for async processing
+    const webhookQueue = require('../services/webhookQueue');
+    const depth = webhookQueue.enqueue(cleanPhone, body);
+
+    console.log(`[Queue] ✉ Webhook from ${cleanPhone} queued (depth=${depth}). Returning 200 to Twilio immediately.`);
+
+    // Return empty TwiML — Twilio won't retry since we responded in time
+    res.type('text/xml');
+    return res.send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+/**
+ * GET /api/queue/status
+ * Returns live webhook queue metrics for monitoring.
+ */
+exports.getQueueStatus = (req, res) => {
+  try {
+    const webhookQueue = require('../services/webhookQueue');
+    return res.json({ success: true, data: webhookQueue.getStatus() });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
